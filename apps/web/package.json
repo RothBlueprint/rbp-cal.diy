@@ -90,7 +90,7 @@
     "bcryptjs": "2.4.3",
     "botid": "1.5.7",
     "classnames": "2.3.2",
-    "dompurify": "3.3.2",
+    "dompurify": "3.4.13",
     "entities": "4.5.0",
     "handlebars": "4.7.9",
     "i18next": "23.2.3",
