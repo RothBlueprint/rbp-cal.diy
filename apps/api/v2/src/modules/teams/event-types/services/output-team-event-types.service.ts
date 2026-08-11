@@ -11,9 +11,9 @@ import type {
   User,
 } from "@calcom/prisma/client";
 import { Injectable } from "@nestjs/common";
-import { OutputEventTypesService_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/services/output-event-types.service";
 import { TeamsEventTypesRepository } from "@/modules/teams/event-types/teams-event-types.repository";
 import { UsersRepository } from "@/modules/users/users.repository";
+import { OutputEventTypesService_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/services/output-event-types.service";
 
 type EventTypeRelations = {
   users: User[];
