@@ -1,20 +1,34 @@
 import { UserCreationService } from "@calcom/platform-libraries";
 import type { GetBookingsInput_2024_08_13 } from "@calcom/platform-types";
 import { CreationSource } from "@calcom/prisma/client";
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { randomBytes } from "node:crypto";
+
 import { MembershipsRepository } from "@/modules/memberships/memberships.repository";
+import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
 import { ProvisionUserInput } from "@/modules/users/inputs/provision-user.input";
 import { UsersRepository } from "@/modules/users/users.repository";
 import { BookingsService_2024_08_13 } from "@/platform/bookings/2024-08-13/services/bookings.service";
 import { SchedulesService_2024_06_11 } from "@/platform/schedules/schedules_2024_06_11/services/schedules.service";
 
+// Single-use SSO tokens are stored in VerificationToken rows namespaced by this
+// identifier prefix (+ the target user id). Short-lived on purpose. The consuming
+// web route (/api/auth/rbp-sso) keeps its own copy of this prefix.
+const RBP_SSO_TOKEN_IDENTIFIER_PREFIX = "rbp-sso:";
+const RBP_SSO_TOKEN_TTL_SECONDS = 60;
+
 @Injectable()
 export class UsersAdminService {
+  private readonly logger = new Logger("UsersAdminService");
+
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly membershipsRepository: MembershipsRepository,
     private readonly schedulesService: SchedulesService_2024_06_11,
-    private readonly bookingsService: BookingsService_2024_08_13
+    private readonly bookingsService: BookingsService_2024_08_13,
+    private readonly dbWrite: PrismaWriteService,
+    private readonly configService: ConfigService
   ) {}
 
   async provisionUser(input: ProvisionUserInput) {
@@ -60,6 +74,34 @@ export class UsersAdminService {
       timeZone: input.timeZone,
       defaultScheduleId: schedule.id,
       teamIds,
+    };
+  }
+
+  async createLoginToken(userId: number, adminUserId: number) {
+    const user = await this.usersRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+
+    const token = randomBytes(32).toString("hex");
+    const expires = new Date(Date.now() + RBP_SSO_TOKEN_TTL_SECONDS * 1000);
+
+    await this.dbWrite.prisma.verificationToken.create({
+      data: {
+        identifier: `${RBP_SSO_TOKEN_IDENTIFIER_PREFIX}${userId}`,
+        token,
+        expires,
+      },
+    });
+
+    // Audit: minting a login token is login-as-anyone power, restricted to admins.
+    this.logger.log(`login token minted for user ${userId} by admin ${adminUserId}`);
+
+    const baseUrl = (this.configService.get<string>("app.baseUrl") ?? "").replace(/\/$/, "");
+    return {
+      token,
+      url: `${baseUrl}/api/auth/rbp-sso?token=${token}`,
+      expiresInSeconds: RBP_SSO_TOKEN_TTL_SECONDS,
     };
   }
 
