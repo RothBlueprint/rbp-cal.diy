@@ -11,6 +11,7 @@ import { OAuthClientModule } from "@/modules/oauth-clients/oauth-client.module";
 import { StripeModule } from "@/modules/stripe/stripe.module";
 import { TeamsEventTypesModule } from "@/modules/teams/event-types/teams-event-types.module";
 import { TimezoneModule } from "@/modules/timezones/timezones.module";
+import { UsersAdminModule } from "@/modules/users/users-admin.module";
 import { VerifiedResourcesModule } from "@/modules/verified-resources/verified-resources.module";
 import { PlatformEndpointsModule } from "@/platform/platform-endpoints-module";
 
@@ -26,6 +27,7 @@ import { PlatformEndpointsModule } from "@/platform/platform-endpoints-module";
     AtomsModule,
     StripeModule,
     TeamsEventTypesModule,
+    UsersAdminModule,
     ConferencingModule,
     CalUnifiedCalendarsModule,
     VerifiedResourcesModule,
