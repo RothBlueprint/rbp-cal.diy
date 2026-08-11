@@ -1,0 +1,110 @@
+name: Build & Push Images
+
+# Builds the two cal images and pushes them to GHCR tagged by branch:
+#   ghcr.io/deidyomega/rbp-cal-web:<branch>  (Next.js web, port 3000)
+#   ghcr.io/deidyomega/rbp-cal-api:<branch>  (NestJS API v2, port 5555)
+#
+# Digests are exposed as job outputs so a future deploy workflow can pin
+# task definitions content-addressed (Fargate caches tag->digest, so
+# deploying by mutable tag is unreliable — same rationale as the rbp
+# Django pipeline).
+#
+# Build-args are placeholders: the web image rewrites NEXT_PUBLIC_WEBAPP_URL
+# at container start (scripts/replace-placeholder.sh), and the api build
+# only needs a syntactically valid DATABASE_URL for prisma generate.
+# Real configuration arrives at runtime from AWS Secrets Manager.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-web:
+    name: Build web image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.tag }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compose image tag
+        id: image
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "tag=${{ env.REGISTRY }}/${OWNER}/rbp-cal-web:${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push web
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.image.outputs.tag }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+          build-args: |
+            NEXT_PUBLIC_WEBAPP_URL=https://calendar.rothblueprint.com
+            NEXT_PUBLIC_API_V2_URL=https://calendar-api.rothblueprint.com/v2
+            DATABASE_URL=postgresql://user:pass@localhost:5432/db
+            CALCOM_TELEMETRY_DISABLED=1
+
+  build-api:
+    name: Build api image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.tag }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compose image tag
+        id: image
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "tag=${{ env.REGISTRY }}/${OWNER}/rbp-cal-api:${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push api
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/api/v2/Dockerfile
+          push: true
+          tags: ${{ steps.image.outputs.tag }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+          build-args: |
+            DATABASE_URL=postgresql://user:pass@localhost:5432/db
+            DATABASE_DIRECT_URL=postgresql://user:pass@localhost:5432/db
