@@ -1,13 +1,16 @@
-name: Build & Push Images
+name: Build & Deploy
 
-# Builds the two cal images and pushes them to GHCR tagged by branch:
-#   ghcr.io/deidyomega/rbp-cal-web:<branch>  (Next.js web, port 3000)
-#   ghcr.io/deidyomega/rbp-cal-api:<branch>  (NestJS API v2, port 5555)
+# Builds the two cal images, pushes them to GHCR tagged by branch, then
+# deploys digest-pinned to ECS (rbp-fargate) via .github/scripts/cal-deploy.sh:
+#   ghcr.io/rothblueprint/rbp-cal-web:<branch>  (Next.js web, port 3000)
+#   ghcr.io/rothblueprint/rbp-cal-api:<branch>  (NestJS API v2, port 5555)
 #
-# Digests are exposed as job outputs so a future deploy workflow can pin
-# task definitions content-addressed (Fargate caches tag->digest, so
-# deploying by mutable tag is unreliable — same rationale as the rbp
-# Django pipeline).
+# The deploy job is inert until repo VARIABLES are set (after the
+# CalendarStack lands via cdktf):
+#   DEPLOY_ENABLED       "true" to activate the deploy job
+#   AWS_DEPLOY_ROLE_ARN  rbp-calendar-deploy role ARN (CalendarStack output)
+#   MIGRATE_SUBNETS      comma-separated private subnet ids
+#   MIGRATE_SG           cal tasks security group id
 #
 # Build-args are placeholders: the web image rewrites NEXT_PUBLIC_WEBAPP_URL
 # at container start (scripts/replace-placeholder.sh), and the api build
@@ -108,3 +111,34 @@ jobs:
           build-args: |
             DATABASE_URL=postgresql://user:pass@localhost:5432/db
             DATABASE_DIRECT_URL=postgresql://user:pass@localhost:5432/db
+
+  deploy:
+    name: Deploy to ECS
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    needs: [build-web, build-api]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Deploy digest-pinned to ECS
+        env:
+          AWS_REGION: us-west-2
+          CLUSTER: rbp-fargate
+          WEB_IMAGE: ${{ needs.build-web.outputs.image }}
+          WEB_DIGEST: ${{ needs.build-web.outputs.digest }}
+          API_IMAGE: ${{ needs.build-api.outputs.image }}
+          API_DIGEST: ${{ needs.build-api.outputs.digest }}
+          MIGRATE_SUBNETS: ${{ vars.MIGRATE_SUBNETS }}
+          MIGRATE_SG: ${{ vars.MIGRATE_SG }}
+        run: |
+          chmod +x .github/scripts/cal-deploy.sh
+          ./.github/scripts/cal-deploy.sh
