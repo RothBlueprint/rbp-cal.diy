@@ -1,9 +1,4 @@
 import { Logger, Module } from "@nestjs/common";
-import { EventTypesModule_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.module";
-import { EventTypesPrivateLinksModule } from "@/platform/event-types-private-links/event-types-private-links.module";
-import { SchedulesModule_2024_06_11 } from "@/platform/schedules/schedules_2024_06_11/schedules.module";
-import { InputSchedulesService_2024_06_11 } from "@/platform/schedules/schedules_2024_06_11/services/input-schedules.service";
-import { SchedulesService_2024_06_11 } from "@/platform/schedules/schedules_2024_06_11/services/schedules.service";
 import { AppsRepository } from "@/modules/apps/apps.repository";
 import { ConferencingRepository } from "@/modules/conferencing/repositories/conferencing.repository";
 import { ConferencingService } from "@/modules/conferencing/services/conferencing.service";
@@ -25,6 +20,11 @@ import { StripeModule } from "@/modules/stripe/stripe.module";
 import { TokensRepository } from "@/modules/tokens/tokens.repository";
 import { UsersModule } from "@/modules/users/users.module";
 import { TeamsVerifiedResourcesRepository } from "@/modules/verified-resources/teams-verified-resources.repository";
+import { EventTypesModule_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.module";
+import { EventTypesPrivateLinksModule } from "@/platform/event-types-private-links/event-types-private-links.module";
+import { SchedulesModule_2024_06_11 } from "@/platform/schedules/schedules_2024_06_11/schedules.module";
+import { InputSchedulesService_2024_06_11 } from "@/platform/schedules/schedules_2024_06_11/services/input-schedules.service";
+import { SchedulesService_2024_06_11 } from "@/platform/schedules/schedules_2024_06_11/services/schedules.service";
 
 @Module({
   imports: [
@@ -58,8 +58,6 @@ import { TeamsVerifiedResourcesRepository } from "@/modules/verified-resources/t
     OAuthClientRepository,
     Logger,
   ],
-  exports: [
-    OrganizationsRepository,
-  ],
+  exports: [OrganizationsRepository],
 })
 export class OrganizationsModule {}
