@@ -20,6 +20,9 @@ name: Build & Deploy
 on:
   push:
     branches: [main]
+    # Markdown-only commits do not change either image; skip the ~16 minute build.
+    paths-ignore:
+      - "**.md"
   workflow_dispatch:
 
 env:
