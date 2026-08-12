@@ -39,16 +39,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const record = await prisma.verificationToken.findUnique({ where: { token } });
 
-  const isValid = Boolean(
-    record?.identifier.startsWith(SSO_TOKEN_IDENTIFIER_PREFIX) && record.expires > new Date()
-  );
-
   // Always consume the row if it exists (single-use), even when expired.
   if (record) {
     await prisma.verificationToken.delete({ where: { token } }).catch(() => undefined);
   }
 
-  if (!isValid) {
+  // One guard rather than a separate isValid flag: narrowing `record` to
+  // non-null has to survive to the read below, and TypeScript only carries
+  // that through a direct condition, not one wrapped in Boolean(...).
+  if (
+    !record ||
+    !record.identifier.startsWith(SSO_TOKEN_IDENTIFIER_PREFIX) ||
+    record.expires <= new Date()
+  ) {
     return NextResponse.json({ message: "invalid or expired token" }, { status: 401 });
   }
 
