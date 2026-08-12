@@ -3,6 +3,7 @@
  * prepends https:// to make it valid for URL parsing.
  * This handles cases where environment variables have their protocol stripped
  */
+import process from "node:process";
 function ensureProtocol(url: string | undefined): string {
   if (!url) return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
@@ -34,12 +35,12 @@ export const WEBAPP_URL_FOR_OAUTH = IS_PRODUCTION || IS_DEV ? WEBAPP_URL : "http
 
 /** @deprecated use `WEBAPP_URL` */
 export const BASE_URL = WEBAPP_URL;
-export const WEBSITE_URL = ensureProtocol(process.env.NEXT_PUBLIC_WEBSITE_URL) || "https://cal.com";
-export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Cal.diy";
-export const SUPPORT_MAIL_ADDRESS = process.env.NEXT_PUBLIC_SUPPORT_MAIL_ADDRESS || "help@cal.com";
-export const COMPANY_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || "Cal.com, Inc.";
+export const WEBSITE_URL = ensureProtocol(process.env.NEXT_PUBLIC_WEBSITE_URL) || "https://rothblueprint.com";
+export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "RothBlueprint";
+export const SUPPORT_MAIL_ADDRESS = process.env.NEXT_PUBLIC_SUPPORT_MAIL_ADDRESS || "hey@rothblueprint.com";
+export const COMPANY_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || "RothBlueprint";
 export const SENDER_ID = process.env.NEXT_PUBLIC_SENDER_ID || "Cal";
-export const SENDER_NAME = process.env.NEXT_PUBLIC_SENDGRID_SENDER_NAME || "Cal.diy";
+export const SENDER_NAME = process.env.NEXT_PUBLIC_SENDGRID_SENDER_NAME || "RothBlueprint";
 export const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || APP_NAME;
 
 // This is the URL from which all Cal Links and their assets are served.
@@ -98,16 +99,21 @@ export const PUBLIC_QUICK_AVAILABILITY_ROLLOUT =
 
 /** @deprecated use `WEBAPP_URL` */
 export const NEXT_PUBLIC_BASE_URL = process.env.NEXT_PUBLIC_WEBAPP_URL || `https://${process.env.VERCEL_URL}`;
-export const LOGO = "/calcom-logo-white-word.svg";
-export const LOGO_DARK = "/cal-logo-word-black.svg";
-export const LOGO_ICON = "/cal-com-icon-white.svg";
+// RothBlueprint brand assets (apps/web/public). White wordmark for dark
+// surfaces, dark wordmark for light ones, square mark for tight spaces.
+export const LOGO = "/rbp-logo-white.svg";
+export const LOGO_DARK = "/rbp-logo-dark.svg";
+export const LOGO_ICON = "/rbp-icon.svg";
 export const AVATAR_FALLBACK = "/avatar.svg";
-export const FAVICON_16 = "/favicon-16x16.png";
-export const FAVICON_32 = "/favicon-32x32.png";
-export const APPLE_TOUCH_ICON = "/apple-touch-icon.png";
-export const MSTILE_ICON = "/mstile-150x150.png";
-export const ANDROID_CHROME_ICON_192 = "/android-chrome-192x192.png";
-export const ANDROID_CHROME_ICON_256 = "/android-chrome-256x256.png";
+// All icon sizes render from the one square mark: /api/logo fetches these and
+// resizes per request (packages/lib/server/imageUtils rasterises SVG via sharp),
+// so there is no set of pre-rendered PNGs to keep in sync.
+export const FAVICON_16 = "/rbp-icon.svg";
+export const FAVICON_32 = "/rbp-icon.svg";
+export const APPLE_TOUCH_ICON = "/rbp-icon.svg";
+export const MSTILE_ICON = "/rbp-icon.svg";
+export const ANDROID_CHROME_ICON_192 = "/rbp-icon.svg";
+export const ANDROID_CHROME_ICON_256 = "/rbp-icon.svg";
 export const ROADMAP = "https://cal.com/roadmap";
 export const DESKTOP_APP_LINK = "https://cal.com/download";
 export const JOIN_COMMUNITY = "https://github.com/calcom/cal.diy/discussions";

@@ -48,12 +48,17 @@ async function ensurePool(index: number) {
   const slug = POOL_COUNT === 1 ? SLUG_PREFIX : `${SLUG_PREFIX}-${index}`;
   const name = POOL_COUNT === 1 ? "RBP Pool" : `RBP Pool ${index}`;
 
+  // The booking page renders this as the profile image the lead sees, so it
+  // carries the brand independently of the app chrome.
+  const logoUrl = `${process.env.NEXT_PUBLIC_WEBAPP_URL ?? ""}/rbp-logo-dark.svg`;
+
   let team = await prisma.team.findFirst({ where: { slug, parentId: null }, select: { id: true } });
   if (!team) {
-    team = await prisma.team.create({ data: { name, slug }, select: { id: true } });
+    team = await prisma.team.create({ data: { name, slug, logoUrl }, select: { id: true } });
     console.log(`created team ${slug} (id ${team.id})`);
   } else {
-    console.log(`team ${slug} exists (id ${team.id})`);
+    await prisma.team.update({ where: { id: team.id }, data: { logoUrl } });
+    console.log(`team ${slug} exists (id ${team.id}), logo refreshed`);
   }
 
   let eventType = await prisma.eventType.findFirst({
