@@ -111,7 +111,28 @@ async function ensurePool(index: number) {
   return { slug, teamId: team.id, eventTypeId: eventType.id };
 }
 
+async function ensureSignupDisabled() {
+  // NEXT_PUBLIC_DISABLE_SIGNUP cannot do this: Next.js inlines NEXT_PUBLIC_*
+  // during `next build`, so setting it at runtime (e.g. in an ECS task
+  // definition) has no effect on the deployed bundle. The signup route also
+  // consults this Feature row, which IS read at runtime — that is the
+  // dependable switch. Agents are created by rbp via POST /v2/users, so public
+  // signup stays closed.
+  const feature = await prisma.feature.findUnique({ where: { slug: "disable-signup" } });
+  if (!feature) {
+    console.log("  disable-signup feature row missing - skipping");
+    return;
+  }
+  if (feature.enabled) {
+    console.log("  signup already disabled");
+    return;
+  }
+  await prisma.feature.update({ where: { slug: "disable-signup" }, data: { enabled: true } });
+  console.log("  disabled public signup (disable-signup feature)");
+}
+
 async function main() {
+  await ensureSignupDisabled();
   const pools = [];
   for (let i = 1; i <= POOL_COUNT; i++) {
     pools.push(await ensurePool(i));
