@@ -1,15 +1,32 @@
-import { UserCreationService } from "@calcom/platform-libraries";
-import type { GetBookingsInput_2024_08_13 } from "@calcom/platform-types";
-import { CreationSource } from "@calcom/prisma/client";
-import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { randomBytes } from "node:crypto";
-
+import { GOOGLE_CALENDAR, OFFICE_365_CALENDAR } from "@calcom/platform-constants";
+import { UserCreationService } from "@calcom/platform-libraries";
+import type {
+  CreateEventTypeInput_2024_06_14,
+  GetBookingsInput_2024_08_13,
+  UpdateScheduleInput_2024_06_11,
+} from "@calcom/platform-types";
+import { CreationSource } from "@calcom/prisma/client";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { signState } from "@/lib/oauth-state/signed-state";
+import { ConferencingService } from "@/modules/conferencing/services/conferencing.service";
 import { MembershipsRepository } from "@/modules/memberships/memberships.repository";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
 import { ProvisionUserInput } from "@/modules/users/inputs/provision-user.input";
 import { UsersRepository } from "@/modules/users/users.repository";
 import { BookingsService_2024_08_13 } from "@/platform/bookings/2024-08-13/services/bookings.service";
+import { CalendarsService } from "@/platform/calendars/services/calendars.service";
+import { GoogleCalendarService } from "@/platform/calendars/services/gcal.service";
+import { OutlookService } from "@/platform/calendars/services/outlook.service";
+import { EventTypesService_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/services/event-types.service";
+import { InputEventTypesService_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/services/input-event-types.service";
 import { SchedulesService_2024_06_11 } from "@/platform/schedules/schedules_2024_06_11/services/schedules.service";
 
 // Single-use SSO tokens are stored in VerificationToken rows namespaced by this
@@ -27,9 +44,24 @@ export class UsersAdminService {
     private readonly membershipsRepository: MembershipsRepository,
     private readonly schedulesService: SchedulesService_2024_06_11,
     private readonly bookingsService: BookingsService_2024_08_13,
+    private readonly conferencingService: ConferencingService,
+    private readonly eventTypesService: EventTypesService_2024_06_14,
+    private readonly inputEventTypesService: InputEventTypesService_2024_06_14,
+    private readonly calendarsService: CalendarsService,
+    private readonly googleCalendarService: GoogleCalendarService,
+    private readonly outlookService: OutlookService,
     private readonly dbWrite: PrismaWriteService,
     private readonly configService: ConfigService
   ) {}
+
+  /** Resolve a target user or 404. Every admin-on-behalf-of method starts here. */
+  private async requireUser(userId: number) {
+    const user = await this.usersRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+    return user;
+  }
 
   async provisionUser(input: ProvisionUserInput) {
     const existing = await this.usersRepository.findByEmail(input.email);
@@ -78,10 +110,7 @@ export class UsersAdminService {
   }
 
   async createLoginToken(userId: number, adminUserId: number) {
-    const user = await this.usersRepository.findById(userId);
-    if (!user) {
-      throw new NotFoundException(`User with id ${userId} not found`);
-    }
+    await this.requireUser(userId);
 
     const token = randomBytes(32).toString("hex");
     const expires = new Date(Date.now() + RBP_SSO_TOKEN_TTL_SECONDS * 1000);
@@ -106,10 +135,7 @@ export class UsersAdminService {
   }
 
   async getUserBookings(userId: number, queryParams: GetBookingsInput_2024_08_13) {
-    const user = await this.usersRepository.findById(userId);
-    if (!user) {
-      throw new NotFoundException(`User with id ${userId} not found`);
-    }
+    const user = await this.requireUser(userId);
 
     // The shared bookings query scopes to the passed user context (organizer/attendee),
     // so substituting the target user returns that user's bookings.
@@ -117,5 +143,160 @@ export class UsersAdminService {
       id: user.id,
       email: user.email,
     });
+  }
+
+  // ── Availability ──────────────────────────────────────────────────────────
+  //
+  // The schedule service is already keyed by userId on every method, so these are
+  // pass-throughs whose only job is to substitute the path-param user for the
+  // authenticated one. That substitution is the entire point: /v2/schedules is
+  // ApiAuthGuard-only and therefore acts as whoever the bearer token IS, which for
+  // rbp is the admin — so rbp cannot edit an agent's availability through it.
+
+  async getUserDefaultSchedule(userId: number) {
+    await this.requireUser(userId);
+    return await this.schedulesService.getUserScheduleDefault(userId);
+  }
+
+  async getUserSchedules(userId: number) {
+    await this.requireUser(userId);
+    return await this.schedulesService.getUserSchedules(userId);
+  }
+
+  async updateUserSchedule(userId: number, scheduleId: number, body: UpdateScheduleInput_2024_06_11) {
+    await this.requireUser(userId);
+    // updateUserSchedule scopes its lookup by userId, so a scheduleId belonging to
+    // someone else 404s here rather than being edited across the user boundary.
+    return await this.schedulesService.updateUserSchedule(userId, scheduleId, body);
+  }
+
+  // ── Event types ───────────────────────────────────────────────────────────
+  //
+  // POST /v2/event-types acts as whoever the bearer token IS, which for rbp is
+  // the admin — using it would attach the event type to the admin account. This
+  // substitutes the path-param user, the same shape as schedules and bookings.
+
+  async createUserEventType(userId: number, body: CreateEventTypeInput_2024_06_14) {
+    // The profile-joined shape: createUserEventType reads the profile to decide
+    // which organisation/profile the event type hangs off.
+    const user = await this.usersRepository.findByIdWithProfile(userId);
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+
+    // Transform against the TARGET user, not the caller — the validators check
+    // things like schedule ownership, which are the agent's, not the admin's.
+    const transformed = await this.inputEventTypesService.transformAndValidateCreateEventTypeInput(
+      user,
+      body
+    );
+
+    return await this.eventTypesService.createUserEventType(user, transformed);
+  }
+
+  // ── Conferencing ──────────────────────────────────────────────────────────
+  //
+  // Including the OAuth start: `getConferencingOAuthUrl` signs a state naming the
+  // target user, so the credential lands on THEM even though an admin key began
+  // the flow. The user-scoped /v2/conferencing/:app/oauth/auth-url can't do this
+  // — it copies the caller's own bearer token into the state and the callback
+  // resolves the owner from that, so an admin key would file the agent's Zoom
+  // account under the admin. The agent still approves at Zoom/Microsoft, which no
+  // design avoids; what they no longer have to do is visit the calendar app.
+
+  async getUserConferencingApps(userId: number) {
+    await this.requireUser(userId);
+    return await this.conferencingService.getConferencingApps(userId);
+  }
+
+  async getUserDefaultConferencingApp(userId: number) {
+    await this.requireUser(userId);
+    return await this.conferencingService.getUserDefaultConferencingApp(userId);
+  }
+
+  async setUserDefaultConferencingApp(userId: number, app: string) {
+    // setDefaultConferencingApp reads credentials off the user record, so this one
+    // needs the profile-joined shape rather than the bare user.
+    const user = await this.usersRepository.findByIdWithProfile(userId);
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+    return await this.conferencingService.setDefaultConferencingApp(user, app);
+  }
+
+  async connectUserNonOauthApp(userId: number, app: string) {
+    await this.requireUser(userId);
+    // google-meet only — it is the one conferencing app with no OAuth of its own,
+    // because it rides the user's existing Google Calendar credential.
+    return await this.conferencingService.connectUserNonOauthApp(app, userId);
+  }
+
+  /**
+   * Start an OAuth conferencing connect on a user's behalf.
+   *
+   * Returns the provider's consent URL. Redirect the user's browser straight to
+   * it — they approve at Zoom/Microsoft and the callback binds the credential to
+   * `userId`, then bounces them to `returnTo`. No Cal session, and no Cal page,
+   * is involved at any point.
+   */
+  async getConferencingOAuthUrl(userId: number, app: string, returnTo?: string, onErrorReturnTo?: string) {
+    await this.requireUser(userId);
+    const state = signState(
+      { userId, returnTo, onErrorReturnTo },
+      this.configService.get("next.authSecret", { infer: true }) ?? ""
+    );
+    return await this.conferencingService.generateOAuthUrlWithRawState(app, state);
+  }
+
+  // ── Calendars ─────────────────────────────────────────────────────────────
+  //
+  // Same signed-state mechanism as conferencing, against the Google/Outlook
+  // calendar OAuth. Worth stating because it is the step everything else waits
+  // on: Google Meet cannot be installed until Google Calendar is connected, and
+  // an agent with no connected calendar is bookable over their real commitments.
+
+  /**
+   * The user's connected calendars.
+   *
+   * The settings UI needs this to say whether a calendar is attached at all —
+   * without one Cal has no busy times to check, so the round robin books the
+   * agent over their real commitments and the first they hear of it is a clash.
+   */
+  async getUserCalendars(userId: number) {
+    await this.requireUser(userId);
+    return await this.calendarsService.getCalendars(userId);
+  }
+
+  async getCalendarOAuthUrl(userId: number, calendar: string, returnTo?: string) {
+    await this.requireUser(userId);
+    const state = signState(
+      { userId, returnTo },
+      this.configService.get("next.authSecret", { infer: true }) ?? ""
+    );
+
+    switch (calendar) {
+      case GOOGLE_CALENDAR:
+        return await this.googleCalendarService.getCalendarRedirectUrl(
+          "",
+          returnTo ?? "",
+          returnTo,
+          false,
+          state
+        );
+      case OFFICE_365_CALENDAR:
+        return await this.outlookService.getCalendarRedirectUrl("", returnTo ?? "", returnTo, false, state);
+      default:
+        throw new BadRequestException(
+          `Invalid calendar. Available: ${[GOOGLE_CALENDAR, OFFICE_365_CALENDAR].join(", ")}`
+        );
+    }
+  }
+
+  async disconnectUserConferencingApp(userId: number, app: string) {
+    const user = await this.usersRepository.findByIdWithProfile(userId);
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+    return await this.conferencingService.disconnectConferencingApp(user, app);
   }
 }

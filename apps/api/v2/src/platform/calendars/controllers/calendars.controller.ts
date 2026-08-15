@@ -1,3 +1,44 @@
+import {
+  APPLE_CALENDAR,
+  APPS_READ,
+  CALENDARS,
+  CREDENTIAL_CALENDARS,
+  GOOGLE_CALENDAR,
+  OFFICE_365_CALENDAR,
+  SUCCESS_STATUS,
+} from "@calcom/platform-constants";
+import { ApiResponse, CalendarBusyTimesInput, CreateCalendarCredentialsInput } from "@calcom/platform-types";
+import type { User } from "@calcom/prisma/client";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseBoolPipe,
+  Post,
+  Query,
+  Redirect,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { ApiHeader, ApiOperation, ApiParam, ApiQuery, ApiTags as DocsTags } from "@nestjs/swagger";
+import { plainToClass } from "class-transformer";
+import { Request } from "express";
+import { z } from "zod";
+import { API_VERSIONS_VALUES } from "@/lib/api-versions";
+import { API_KEY_OR_ACCESS_TOKEN_HEADER } from "@/lib/docs/headers";
+import { looksSigned, verifyState } from "@/lib/oauth-state/signed-state";
+import { ApiAuthGuardOnlyAllow } from "@/modules/auth/decorators/api-auth-guard-only-allow.decorator";
+import { GetUser } from "@/modules/auth/decorators/get-user/get-user.decorator";
+import { Permissions } from "@/modules/auth/decorators/permissions/permissions.decorator";
+import { ApiAuthGuard } from "@/modules/auth/guards/api-auth/api-auth.guard";
+import { PermissionsGuard } from "@/modules/auth/guards/permissions/permissions.guard";
+import { UserWithProfile } from "@/modules/users/users.repository";
 import { CalendarsRepository } from "@/platform/calendars/calendars.repository";
 import { CreateIcsFeedInputDto } from "@/platform/calendars/input/create-ics.input";
 import { CreateIcsFeedOutputResponseDto } from "@/platform/calendars/input/create-ics.output";
@@ -5,55 +46,15 @@ import { DeleteCalendarCredentialsInputBodyDto } from "@/platform/calendars/inpu
 import { GetBusyTimesOutput } from "@/platform/calendars/outputs/busy-times.output";
 import { ConnectedCalendarsOutput } from "@/platform/calendars/outputs/connected-calendars.output";
 import {
-  DeletedCalendarCredentialsOutputResponseDto,
   DeletedCalendarCredentialsOutputDto,
+  DeletedCalendarCredentialsOutputResponseDto,
 } from "@/platform/calendars/outputs/delete-calendar-credentials.output";
 import { AppleCalendarService } from "@/platform/calendars/services/apple-calendar.service";
-import { CalendarsCacheService } from "@/platform/calendars/services/calendars-cache.service";
 import { CalendarsService } from "@/platform/calendars/services/calendars.service";
+import { CalendarsCacheService } from "@/platform/calendars/services/calendars-cache.service";
 import { GoogleCalendarService } from "@/platform/calendars/services/gcal.service";
 import { IcsFeedService } from "@/platform/calendars/services/ics-feed.service";
 import { OutlookService } from "@/platform/calendars/services/outlook.service";
-import { API_VERSIONS_VALUES } from "@/lib/api-versions";
-import { API_KEY_OR_ACCESS_TOKEN_HEADER } from "@/lib/docs/headers";
-import { ApiAuthGuardOnlyAllow } from "@/modules/auth/decorators/api-auth-guard-only-allow.decorator";
-import { GetUser } from "@/modules/auth/decorators/get-user/get-user.decorator";
-import { Permissions } from "@/modules/auth/decorators/permissions/permissions.decorator";
-import { ApiAuthGuard } from "@/modules/auth/guards/api-auth/api-auth.guard";
-import { PermissionsGuard } from "@/modules/auth/guards/permissions/permissions.guard";
-import { UserWithProfile } from "@/modules/users/users.repository";
-import {
-  Controller,
-  Get,
-  UseGuards,
-  Query,
-  HttpStatus,
-  HttpCode,
-  Req,
-  Param,
-  Headers,
-  Redirect,
-  BadRequestException,
-  Post,
-  Body,
-  ParseBoolPipe,
-} from "@nestjs/common";
-import { ApiHeader, ApiOperation, ApiParam, ApiQuery, ApiTags as DocsTags } from "@nestjs/swagger";
-import { plainToClass } from "class-transformer";
-import { Request } from "express";
-import { z } from "zod";
-
-import { APPS_READ } from "@calcom/platform-constants";
-import {
-  SUCCESS_STATUS,
-  CALENDARS,
-  GOOGLE_CALENDAR,
-  OFFICE_365_CALENDAR,
-  APPLE_CALENDAR,
-  CREDENTIAL_CALENDARS,
-} from "@calcom/platform-constants";
-import { ApiResponse, CalendarBusyTimesInput, CreateCalendarCredentialsInput } from "@calcom/platform-types";
-import type { User } from "@calcom/prisma/client";
 
 export interface CalendarState {
   accessToken: string;
@@ -85,7 +86,8 @@ export class CalendarsController {
     private readonly googleCalendarService: GoogleCalendarService,
     private readonly appleCalendarService: AppleCalendarService,
     private readonly icsFeedService: IcsFeedService,
-    private readonly calendarsRepository: CalendarsRepository
+    private readonly calendarsRepository: CalendarsRepository,
+    private readonly config: ConfigService
   ) {}
 
   @Post("/ics-feed/save")
@@ -208,6 +210,40 @@ export class CalendarsController {
   ): Promise<{ url: string }> {
     let stateObj: CalendarState;
 
+    // Admin-driven flows carry a signed state naming the target user (see
+    // lib/oauth-state/signed-state.ts). Checked FIRST and on its own: this route
+    // is unguarded because Google/Microsoft redirect a browser to it, so the
+    // signature is the only proof the named user consented. Falling through on a
+    // bad signature would hand a forgery to the legacy parsers below, so an
+    // invalid signed state is refused outright.
+    if (looksSigned(state)) {
+      const signed = verifyState(state, this.config.get("next.authSecret", { infer: true }) ?? "");
+      if (!signed) {
+        throw new BadRequestException("Invalid `state`");
+      }
+      // No accessToken to carry — the signature authenticates the user directly,
+      // and the services take the owner as an explicit argument instead.
+      const redirectTo = signed.returnTo ?? "";
+      switch (calendar) {
+        case OFFICE_365_CALENDAR:
+          return await this.outlookService.save(code, "", redirectTo, redirectTo, false, signed.userId);
+        case GOOGLE_CALENDAR:
+          return await this.googleCalendarService.save(
+            code,
+            "",
+            redirectTo,
+            redirectTo,
+            false,
+            signed.userId
+          );
+        default:
+          throw new BadRequestException(
+            "Invalid calendar type, available calendars are: ",
+            CALENDARS.join(", ")
+          );
+      }
+    }
+
     try {
       // First try to parse as JSON
       stateObj = JSON.parse(state) as CalendarState;
@@ -311,9 +347,8 @@ export class CalendarsController {
     const { id: credentialId } = body;
     await this.calendarsService.checkCalendarCredentials(credentialId, user.id);
 
-    const { id, type, userId, teamId, appId, invalid } = await this.calendarsRepository.deleteCredentials(
-      credentialId
-    );
+    const { id, type, userId, teamId, appId, invalid } =
+      await this.calendarsRepository.deleteCredentials(credentialId);
 
     this.calendarsCacheService.deleteConnectedAndDestinationCalendarsCache(user.id);
 

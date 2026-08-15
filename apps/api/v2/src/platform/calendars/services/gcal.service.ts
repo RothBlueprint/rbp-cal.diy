@@ -1,21 +1,24 @@
-import { OAuthCalendarApp } from "@/platform/calendars/calendars.interface";
-import type { CalendarState } from "@/platform/calendars/controllers/calendars.controller";
-import { CalendarsService } from "@/platform/calendars/services/calendars.service";
-import { AppsRepository } from "@/modules/apps/apps.repository";
-import { CredentialsRepository } from "@/modules/credentials/credentials.repository";
-import { SelectedCalendarsRepository } from "@/modules/selected-calendars/selected-calendars.repository";
-import { TokensService } from "@/modules/tokens/tokens.service";
+import { GOOGLE_CALENDAR_TYPE, SUCCESS_STATUS } from "@calcom/platform-constants";
+import { Prisma } from "@calcom/prisma/client";
 import { calendar_v3 } from "@googleapis/calendar";
-import { Logger, NotFoundException } from "@nestjs/common";
-import { BadRequestException, UnauthorizedException } from "@nestjs/common";
-import { Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Request } from "express";
 import { OAuth2Client } from "googleapis-common";
 import { z } from "zod";
-
-import { SUCCESS_STATUS, GOOGLE_CALENDAR_TYPE } from "@calcom/platform-constants";
-import { Prisma } from "@calcom/prisma/client";
+import { AppsRepository } from "@/modules/apps/apps.repository";
+import { CredentialsRepository } from "@/modules/credentials/credentials.repository";
+import { SelectedCalendarsRepository } from "@/modules/selected-calendars/selected-calendars.repository";
+import { TokensService } from "@/modules/tokens/tokens.service";
+import { OAuthCalendarApp } from "@/platform/calendars/calendars.interface";
+import type { CalendarState } from "@/platform/calendars/controllers/calendars.controller";
+import { CalendarsService } from "@/platform/calendars/services/calendars.service";
 
 const CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
@@ -55,16 +58,35 @@ export class GoogleCalendarService implements OAuthCalendarApp {
     accessToken: string,
     origin: string,
     redir?: string,
-    isDryRun?: boolean
+    isDryRun?: boolean,
+    signedStateUserId?: number
   ): Promise<{ url: string }> {
-    return await this.saveCalendarCredentialsAndRedirect(code, accessToken, origin, redir, isDryRun);
+    return await this.saveCalendarCredentialsAndRedirect(
+      code,
+      accessToken,
+      origin,
+      redir,
+      isDryRun,
+      signedStateUserId
+    );
   }
 
   async check(userId: number): Promise<{ status: typeof SUCCESS_STATUS }> {
     return await this.checkIfCalendarConnected(userId);
   }
 
-  async getCalendarRedirectUrl(accessToken: string, origin: string, redir?: string, isDryRun?: boolean) {
+  /**
+   * `rawState` overrides the JSON state entirely, for the admin-driven signed-state
+   * flow (lib/oauth-state/signed-state.ts). It must reach the provider byte-for-byte
+   * — re-serializing a signed state invalidates its signature.
+   */
+  async getCalendarRedirectUrl(
+    accessToken: string,
+    origin: string,
+    redir?: string,
+    isDryRun?: boolean,
+    rawState?: string
+  ) {
     const oAuth2Client = await this.getOAuthClient(this.redirectUri);
     const state: CalendarState = {
       accessToken,
@@ -77,7 +99,7 @@ export class GoogleCalendarService implements OAuthCalendarApp {
       access_type: "offline",
       scope: CALENDAR_SCOPES,
       prompt: "consent",
-      state: JSON.stringify(state),
+      state: rawState ?? JSON.stringify(state),
     });
 
     return authUrl;
@@ -130,7 +152,14 @@ export class GoogleCalendarService implements OAuthCalendarApp {
     accessToken: string,
     origin: string,
     redir?: string,
-    isDryRun?: boolean
+    isDryRun?: boolean,
+    /**
+     * Owner taken from a VERIFIED signed state, when an admin started this flow
+     * on the user's behalf. The controller refuses a signed state that fails
+     * verification, so reaching here means it is as trustworthy as the bearer
+     * secret the accessToken branch relies on.
+     */
+    signedStateUserId?: number
   ) {
     // User chose not to authorize your app or didn't authorize your app
     // redirect directly without oauth code
@@ -145,7 +174,7 @@ export class GoogleCalendarService implements OAuthCalendarApp {
 
     const parsedCode = z.string().parse(code);
 
-    const ownerId = await this.tokensService.getAccessTokenOwnerId(accessToken);
+    const ownerId = signedStateUserId ?? (await this.tokensService.getAccessTokenOwnerId(accessToken));
 
     if (!ownerId) {
       throw new UnauthorizedException("Invalid Access token.");

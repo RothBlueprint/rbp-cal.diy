@@ -1,29 +1,30 @@
+import {
+  CAL_VIDEO,
+  CONFERENCING_APPS,
+  GOOGLE_MEET,
+  OFFICE_365_VIDEO,
+  ZOOM,
+} from "@calcom/platform-constants";
+import { userMetadata } from "@calcom/platform-libraries";
+import {
+  getApps,
+  getUsersCredentialsIncludeServiceAccountKey,
+  handleDeleteCredential,
+} from "@calcom/platform-libraries/app-store";
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { OAuthCallbackState } from "@/modules/conferencing/controllers/conferencing.controller";
 import { ConferencingRepository } from "@/modules/conferencing/repositories/conferencing.repository";
 import { GoogleMeetService } from "@/modules/conferencing/services/google-meet.service";
 import { Office365VideoService } from "@/modules/conferencing/services/office365-video.service";
 import { ZoomVideoService } from "@/modules/conferencing/services/zoom-video.service";
 import { TokensRepository } from "@/modules/tokens/tokens.repository";
-import { UserWithProfile } from "@/modules/users/users.repository";
-import { UsersRepository } from "@/modules/users/users.repository";
-import {
-  BadRequestException,
-  InternalServerErrorException,
-  Logger,
-  UnauthorizedException,
-} from "@nestjs/common";
-import { Injectable } from "@nestjs/common";
-
-import {
-  CONFERENCING_APPS,
-  CAL_VIDEO,
-  GOOGLE_MEET,
-  ZOOM,
-  OFFICE_365_VIDEO,
-} from "@calcom/platform-constants";
-import { userMetadata } from "@calcom/platform-libraries";
-import { getUsersCredentialsIncludeServiceAccountKey } from "@calcom/platform-libraries/app-store";
-import { getApps, handleDeleteCredential } from "@calcom/platform-libraries/app-store";
+import { UsersRepository, UserWithProfile } from "@/modules/users/users.repository";
 
 @Injectable()
 export class ConferencingService {
@@ -44,9 +45,10 @@ export class ConferencingService {
 
   async connectUserNonOauthApp(app: string, userId: number) {
     switch (app) {
-      case GOOGLE_MEET:
+      case GOOGLE_MEET: {
         const credential = await this.googleMeetService.connectGoogleMeetToUser(userId);
         return credential;
+      }
       default:
         throw new BadRequestException("Invalid conferencing app. Available apps: GOOGLE_MEET.");
     }
@@ -56,9 +58,19 @@ export class ConferencingService {
     app: string,
     code: string,
     decodedCallbackState: OAuthCallbackState,
-    teamId?: number
+    teamId?: number,
+    /**
+     * Owner resolved from a VERIFIED signed state, when the flow was started by
+     * an admin on this user's behalf. Already authenticated by the time it gets
+     * here — the controller rejects a signed state that fails verification
+     * rather than passing it on — so it is trusted exactly as much as the
+     * accessToken lookup below.
+     */
+    signedStateUserId?: number
   ) {
-    const userId = await this.tokensRepository.getAccessTokenOwnerId(decodedCallbackState.accessToken);
+    const userId =
+      signedStateUserId ??
+      (await this.tokensRepository.getAccessTokenOwnerId(decodedCallbackState.accessToken));
     if (!userId) {
       throw new UnauthorizedException("Invalid Access token.");
     }
@@ -126,12 +138,24 @@ export class ConferencingService {
   }
 
   async generateOAuthUrl(app: string, state: OAuthCallbackState) {
+    return await this.generateOAuthUrlWithRawState(app, JSON.stringify(state));
+  }
+
+  /**
+   * Same as {@link generateOAuthUrl} but takes the `state` already serialized.
+   *
+   * Exists for the signed-state flow: a signed state is an opaque
+   * `v1.<payload>.<sig>` string whose bytes must reach the callback UNCHANGED,
+   * and running it back through JSON.stringify would wrap it in quotes and
+   * invalidate every signature.
+   */
+  async generateOAuthUrlWithRawState(app: string, rawState: string) {
     switch (app) {
       case ZOOM:
-        return await this.zoomVideoService.generateZoomAuthUrl(JSON.stringify(state));
+        return await this.zoomVideoService.generateZoomAuthUrl(rawState);
 
       case OFFICE_365_VIDEO:
-        return await this.office365VideoService.generateOffice365AuthUrl(JSON.stringify(state));
+        return await this.office365VideoService.generateOffice365AuthUrl(rawState);
 
       default:
         throw new BadRequestException(
