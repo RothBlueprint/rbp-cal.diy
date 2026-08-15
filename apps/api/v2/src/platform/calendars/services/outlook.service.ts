@@ -1,23 +1,21 @@
-import { OAuthCalendarApp } from "@/platform/calendars/calendars.interface";
-import { CalendarState } from "@/platform/calendars/controllers/calendars.controller";
-import { CalendarsService } from "@/platform/calendars/services/calendars.service";
-import { CredentialsRepository } from "@/modules/credentials/credentials.repository";
-import { SelectedCalendarsRepository } from "@/modules/selected-calendars/selected-calendars.repository";
-import { TokensService } from "@/modules/tokens/tokens.service";
+import {
+  OFFICE_365_CALENDAR,
+  OFFICE_365_CALENDAR_ID,
+  OFFICE_365_CALENDAR_TYPE,
+  SUCCESS_STATUS,
+} from "@calcom/platform-constants";
 import type { Calendar as OfficeCalendar } from "@microsoft/microsoft-graph-types-beta";
-import { BadRequestException, UnauthorizedException } from "@nestjs/common";
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Request } from "express";
 import { stringify } from "querystring";
 import { z } from "zod";
-
-import {
-  SUCCESS_STATUS,
-  OFFICE_365_CALENDAR,
-  OFFICE_365_CALENDAR_ID,
-  OFFICE_365_CALENDAR_TYPE,
-} from "@calcom/platform-constants";
+import { CredentialsRepository } from "@/modules/credentials/credentials.repository";
+import { SelectedCalendarsRepository } from "@/modules/selected-calendars/selected-calendars.repository";
+import { TokensService } from "@/modules/tokens/tokens.service";
+import { OAuthCalendarApp } from "@/platform/calendars/calendars.interface";
+import { CalendarState } from "@/platform/calendars/controllers/calendars.controller";
+import { CalendarsService } from "@/platform/calendars/services/calendars.service";
 
 @Injectable()
 export class OutlookService implements OAuthCalendarApp {
@@ -49,16 +47,35 @@ export class OutlookService implements OAuthCalendarApp {
     accessToken: string,
     origin: string,
     redir?: string,
-    isDryRun?: boolean
+    isDryRun?: boolean,
+    signedStateUserId?: number
   ): Promise<{ url: string }> {
-    return await this.saveCalendarCredentialsAndRedirect(code, accessToken, origin, redir, isDryRun);
+    return await this.saveCalendarCredentialsAndRedirect(
+      code,
+      accessToken,
+      origin,
+      redir,
+      isDryRun,
+      signedStateUserId
+    );
   }
 
   async check(userId: number): Promise<{ status: typeof SUCCESS_STATUS }> {
     return await this.checkIfCalendarConnected(userId);
   }
 
-  async getCalendarRedirectUrl(accessToken: string, origin: string, redir?: string, isDryRun?: boolean) {
+  /**
+   * `rawState` overrides the JSON state entirely, for the admin-driven signed-state
+   * flow (lib/oauth-state/signed-state.ts). It must reach the provider byte-for-byte
+   * — re-serializing a signed state invalidates its signature.
+   */
+  async getCalendarRedirectUrl(
+    accessToken: string,
+    origin: string,
+    redir?: string,
+    isDryRun?: boolean,
+    rawState?: string
+  ) {
     const { client_id } = await this.calendarsService.getAppKeys(OFFICE_365_CALENDAR_ID);
 
     const state: CalendarState = {
@@ -75,7 +92,7 @@ export class OutlookService implements OAuthCalendarApp {
       client_id,
       prompt: "select_account",
       redirect_uri: this.redirectUri,
-      state: JSON.stringify(state),
+      state: rawState ?? JSON.stringify(state),
     };
 
     const query = stringify(params);
@@ -164,7 +181,14 @@ export class OutlookService implements OAuthCalendarApp {
     accessToken: string,
     origin: string,
     redir?: string,
-    isDryRun?: boolean
+    isDryRun?: boolean,
+    /**
+     * Owner taken from a VERIFIED signed state, when an admin started this flow
+     * on the user's behalf. The controller refuses a signed state that fails
+     * verification, so reaching here means it is as trustworthy as the bearer
+     * secret the accessToken branch relies on.
+     */
+    signedStateUserId?: number
   ) {
     // if code is not defined, user denied to authorize office 365 app, just redirect straight away
     if (!code || code === "undefined") {
@@ -178,7 +202,7 @@ export class OutlookService implements OAuthCalendarApp {
 
     const parsedCode = z.string().parse(code);
 
-    const ownerId = await this.tokensService.getAccessTokenOwnerId(accessToken);
+    const ownerId = signedStateUserId ?? (await this.tokensService.getAccessTokenOwnerId(accessToken));
 
     if (!ownerId) {
       throw new UnauthorizedException("Invalid Access token.");

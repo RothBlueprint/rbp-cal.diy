@@ -1964,7 +1964,7 @@
             "name": "eventUid",
             "required": true,
             "in": "path",
-            "description": "The Google Calendar event ID. You can retrieve this by getting booking references from the following endpoints:\n\n- For team events: GET /v2/organizations/{orgId}/teams/{teamId}/bookings/{bookingUid}/references\n\n- For user events: GET /v2/bookings/{bookingUid}/references",
+            "description": "The Google Calendar event ID. You can retrieve this by getting booking references from the following endpoints:\n\n- For user events: GET /v2/bookings/{bookingUid}/references",
             "schema": {
               "type": "string"
             }
@@ -2011,7 +2011,7 @@
             "name": "eventUid",
             "required": true,
             "in": "path",
-            "description": "The Google Calendar event ID. You can retrieve this by getting booking references from the following endpoints:\n\n- For team events: GET /v2/organizations/{orgId}/teams/{teamId}/bookings/{bookingUid}/references\n\n- For user events: GET /v2/bookings/{bookingUid}/references",
+            "description": "The Google Calendar event ID. You can retrieve this by getting booking references from the following endpoints:\n\n- For user events: GET /v2/bookings/{bookingUid}/references",
             "schema": {
               "type": "string"
             }
@@ -2110,7 +2110,7 @@
             "name": "eventUid",
             "required": true,
             "in": "path",
-            "description": "The Google Calendar event ID. You can retrieve this by getting booking references from the following endpoints:\n\n- For team events: GET /v2/organizations/{orgId}/teams/{teamId}/bookings/{bookingUid}/references\n\n- For user events: GET /v2/bookings/{bookingUid}/references",
+            "description": "The Google Calendar event ID. You can retrieve this by getting booking references from the following endpoints:\n\n- For user events: GET /v2/bookings/{bookingUid}/references",
             "schema": {
               "type": "string"
             }
@@ -2157,7 +2157,7 @@
             "name": "eventUid",
             "required": true,
             "in": "path",
-            "description": "The Google Calendar event ID. You can retrieve this by getting booking references from the following endpoints:\n\n- For team events: GET /v2/organizations/{orgId}/teams/{teamId}/bookings/{bookingUid}/references\n\n- For user events: GET /v2/bookings/{bookingUid}/references",
+            "description": "The Google Calendar event ID. You can retrieve this by getting booking references from the following endpoints:\n\n- For user events: GET /v2/bookings/{bookingUid}/references",
             "schema": {
               "type": "string"
             }
@@ -4909,7 +4909,7 @@
       "post": {
         "operationId": "SchedulesController_2024_06_11_createSchedule",
         "summary": "Create a schedule",
-        "description": "\n      Create a schedule for the authenticated user.\n\n      The point of creating schedules is for event types to be available at specific times.\n\n      The first goal of schedules is to have a default schedule. If you are platform customer and created managed users, then it is important to note that each managed user should have a default schedule.\n      1. If you passed `timeZone` when creating managed user, then the default schedule from Monday to Friday from 9AM to 5PM will be created with that timezone. The managed user can then change the default schedule via the `AvailabilitySettings` atom.\n      2. If you did not, then we assume you want the user to have this specific schedule right away. You should create a default schedule by specifying\n      `\"isDefault\": true` in the request body. Until the user has a default schedule the user can't be booked nor manage their schedule via the AvailabilitySettings atom.\n\n      The second goal of schedules is to create another schedule that event types can point to. This is useful for when an event is booked because availability is not checked against the default schedule but instead against that specific schedule.\n      After creating a non-default schedule, you can update an event type to point to that schedule via the PATCH `event-types/{eventTypeId}` endpoint.\n\n      When specifying start time and end time for each day use the 24 hour format e.g. 08:00, 15:00 etc.\n\n      <Note>Please make sure to pass in the cal-api-version header value as mentioned in the Headers section. Not passing the correct value will default to an older version of this endpoint.</Note>\n      ",
+        "description": "\n      Create a schedule for the authenticated user.\n\n      The point of creating schedules is for event types to be available at specific times.\n\n      The first goal of schedules is to have a default schedule. If you are a platform customer and have created managed users, then it is important to note that each managed user should have a default schedule.\n      1. If you passed `timeZone` when creating a managed user, then the default schedule from Monday to Friday from 9AM to 5PM will be created with that timezone. The managed user can then change the default schedule via the `AvailabilitySettings` atom.\n      2. If you did not, then we assume you want the user to have this specific schedule right away. You should create a default schedule by specifying\n      `\"isDefault\": true` in the request body. Until the user has a default schedule the user can't be booked nor manage their schedule via the AvailabilitySettings atom.\n\n      The second goal of schedules is to create another schedule that event types can point to. This is useful for when an event is booked because availability is not checked against the default schedule but instead against that specific schedule.\n      After creating a non-default schedule, you can update an event type to point to that schedule via the PATCH `event-types/{eventTypeId}` endpoint.\n\n      When specifying start time and end time for each day use the 24 hour format e.g. 08:00, 15:00 etc.\n\n      <Note>Please make sure to pass in the cal-api-version header value as mentioned in the Headers section. Not passing the correct value will default to an older version of this endpoint.</Note>\n      ",
         "parameters": [
           {
             "name": "Authorization",
@@ -5800,6 +5800,380 @@
           }
         },
         "tags": ["Stripe"]
+      }
+    },
+    "/v2/teams/{teamId}/event-types": {
+      "post": {
+        "operationId": "TeamsEventTypesController_createTeamEventType",
+        "summary": "Create an event type",
+        "parameters": [
+          {
+            "name": "teamId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTeamEventTypeInput_2024_06_14"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateTeamEventTypeOutput"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Teams / Event Types"]
+      },
+      "get": {
+        "operationId": "TeamsEventTypesController_getTeamEventTypes",
+        "summary": "Get team event types",
+        "description": "Use the optional `sortCreatedAt` query parameter to order results by creation date (by ID). Accepts \"asc\" (oldest first) or \"desc\" (newest first). When not provided, no explicit ordering is applied.",
+        "parameters": [
+          {
+            "name": "teamId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "eventSlug",
+            "required": false,
+            "in": "query",
+            "description": "Slug of team event type to return.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hostsLimit",
+            "required": false,
+            "in": "query",
+            "description": "Specifies the maximum number of hosts to include in the response. This limit helps optimize performance. If not provided, all Hosts will be fetched.",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "sortCreatedAt",
+            "required": false,
+            "in": "query",
+            "description": "Sort event types by creation date. When not provided, no explicit ordering is applied.",
+            "schema": {
+              "enum": ["asc", "desc"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetTeamEventTypesOutput"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Teams / Event Types"]
+      }
+    },
+    "/v2/teams/{teamId}/event-types/{eventTypeId}": {
+      "get": {
+        "operationId": "TeamsEventTypesController_getTeamEventType",
+        "summary": "Get an event type",
+        "parameters": [
+          {
+            "name": "teamId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "eventTypeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetTeamEventTypeOutput"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Teams / Event Types"]
+      },
+      "patch": {
+        "operationId": "TeamsEventTypesController_updateTeamEventType",
+        "summary": "Update a team event type",
+        "parameters": [
+          {
+            "name": "teamId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "eventTypeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTeamEventTypeInput_2024_06_14"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateTeamEventTypeOutput"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Teams / Event Types"]
+      },
+      "delete": {
+        "operationId": "TeamsEventTypesController_deleteTeamEventType",
+        "summary": "Delete a team event type",
+        "parameters": [
+          {
+            "name": "teamId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "eventTypeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteTeamEventTypeOutput"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Teams / Event Types"]
+      }
+    },
+    "/v2/users": {
+      "post": {
+        "operationId": "UsersAdminController_provisionUser",
+        "summary": "Provision a user (admin only)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisionUserInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionUserOutput"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/login-token": {
+      "post": {
+        "operationId": "UsersAdminController_createLoginToken",
+        "summary": "Mint a single-use SSO login token for a user (admin only)",
+        "description": "Returns a short-lived token and url. Redirect the user's browser to that url to sign them in transparently (append &next=/path to control the landing page). Powerful — logs the caller in as the target user; admin-key gated and single-use.",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginTokenOutput"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/bookings": {
+      "get": {
+        "operationId": "UsersAdminController_getUserBookings",
+        "summary": "Get a user's bookings (admin only)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetBookingsOutput_2024_08_13"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
       }
     },
     "/v2/verified-resources/emails/verification-code/request": {
@@ -15194,7 +15568,6 @@
                 "MEETING_ENDED",
                 "MEETING_STARTED",
                 "RECORDING_READY",
-                "INSTANT_MEETING",
                 "RECORDING_TRANSCRIPTION_GENERATED",
                 "OOO_CREATED",
                 "AFTER_HOSTS_CAL_VIDEO_NO_SHOW",
@@ -15242,7 +15615,6 @@
                 "MEETING_ENDED",
                 "MEETING_STARTED",
                 "RECORDING_READY",
-                "INSTANT_MEETING",
                 "RECORDING_TRANSCRIPTION_GENERATED",
                 "OOO_CREATED",
                 "AFTER_HOSTS_CAL_VIDEO_NO_SHOW",
@@ -15326,7 +15698,6 @@
                 "MEETING_ENDED",
                 "MEETING_STARTED",
                 "RECORDING_READY",
-                "INSTANT_MEETING",
                 "RECORDING_TRANSCRIPTION_GENERATED",
                 "OOO_CREATED",
                 "AFTER_HOSTS_CAL_VIDEO_NO_SHOW",
@@ -15390,7 +15761,6 @@
                 "MEETING_ENDED",
                 "MEETING_STARTED",
                 "RECORDING_READY",
-                "INSTANT_MEETING",
                 "RECORDING_TRANSCRIPTION_GENERATED",
                 "OOO_CREATED",
                 "AFTER_HOSTS_CAL_VIDEO_NO_SHOW",
@@ -15489,7 +15859,6 @@
                 "MEETING_ENDED",
                 "MEETING_STARTED",
                 "RECORDING_READY",
-                "INSTANT_MEETING",
                 "RECORDING_TRANSCRIPTION_GENERATED",
                 "OOO_CREATED",
                 "AFTER_HOSTS_CAL_VIDEO_NO_SHOW",
@@ -15598,6 +15967,937 @@
           },
           "data": {
             "$ref": "#/components/schemas/DestinationCalendarsOutputDto"
+          }
+        },
+        "required": ["status", "data"]
+      },
+      "Host": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "number",
+            "description": "Which user is the host of this event"
+          },
+          "mandatory": {
+            "type": "boolean",
+            "description": "Only relevant for round robin event types. If true then the user must attend round robin event always."
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["lowest", "low", "medium", "high", "highest"]
+          }
+        },
+        "required": ["userId"]
+      },
+      "CreateTeamEventTypeInput_2024_06_14": {
+        "type": "object",
+        "properties": {
+          "lengthInMinutes": {
+            "type": "number",
+            "example": 60
+          },
+          "lengthInMinutesOptions": {
+            "example": [15, 30, 60],
+            "description": "If you want that user can choose between different lengths of the event you can specify them here. Must include the provided `lengthInMinutes`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string",
+            "example": "Learn the secrets of masterchief!"
+          },
+          "slug": {
+            "type": "string",
+            "example": "learn-the-secrets-of-masterchief"
+          },
+          "description": {
+            "type": "string",
+            "example": "Discover the culinary wonders of the Argentina by making the best flan ever!"
+          },
+          "bookingFields": {
+            "type": "array",
+            "description": "Custom fields that can be added to the booking form when the event is booked by someone. By default booking form has name and email field.",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/NameDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/EmailDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/TitleDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/LocationDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/NotesDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/GuestsDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/RescheduleReasonDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/PhoneFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/AddressFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/TextFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/NumberFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/TextAreaFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/SelectFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/MultiSelectFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/MultiEmailFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/CheckboxGroupFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/RadioGroupFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/BooleanFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/UrlFieldInput_2024_06_14"
+                }
+              ]
+            }
+          },
+          "disableGuests": {
+            "type": "boolean",
+            "description": "If true, person booking this event can't add guests via their emails."
+          },
+          "slotInterval": {
+            "type": "number",
+            "description": "Number representing length of each slot when event is booked. By default it equal length of the event type.\n      If event length is 60 minutes then we would have slots 9AM, 10AM, 11AM etc. but if it was changed to 30 minutes then\n      we would have slots 9AM, 9:30AM, 10AM, 10:30AM etc. as the available times to book the 60 minute event."
+          },
+          "minimumBookingNotice": {
+            "type": "number",
+            "description": "Minimum number of minutes before the event that a booking can be made."
+          },
+          "beforeEventBuffer": {
+            "type": "number",
+            "description": "Extra time automatically blocked on your calendar before a meeting starts. This gives you time to prepare, review notes, or transition from your previous activity."
+          },
+          "afterEventBuffer": {
+            "type": "number",
+            "description": "Extra time automatically blocked on your calendar after a meeting ends. This gives you time to wrap up, add notes, or decompress before your next commitment."
+          },
+          "scheduleId": {
+            "type": "number",
+            "description": "If you want that this event has different schedule than user's default one you can specify it here."
+          },
+          "bookingLimitsCount": {
+            "description": "Limit how many times this event can be booked",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BaseBookingLimitsCount_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "bookerActiveBookingsLimit": {
+            "description": "Limit the number of active bookings a booker can make for this event type.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BookerActiveBookingsLimit_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "onlyShowFirstAvailableSlot": {
+            "type": "boolean",
+            "description": "This will limit your availability for this event type to one slot per day, scheduled at the earliest available time."
+          },
+          "bookingLimitsDuration": {
+            "description": "Limit total amount of time that this event can be booked",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BaseBookingLimitsDuration_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "bookingWindow": {
+            "description": "Limit how far in the future this event can be booked",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BusinessDaysWindow_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/CalendarDaysWindow_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/RangeWindow_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "offsetStart": {
+            "type": "number",
+            "description": "Offset timeslots shown to bookers by a specified number of minutes"
+          },
+          "bookerLayouts": {
+            "description": "Should booker have week, month or column view. Specify default layout and enabled layouts user can pick.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BookerLayouts_2024_06_14"
+              }
+            ]
+          },
+          "confirmationPolicy": {
+            "description": "Specify how the booking needs to be manually confirmed before it is pushed to the integrations and a confirmation mail is sent.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BaseConfirmationPolicy_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "recurrence": {
+            "description": "Create a recurring event type.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Recurrence_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "requiresBookerEmailVerification": {
+            "type": "boolean"
+          },
+          "hideCalendarNotes": {
+            "type": "boolean"
+          },
+          "lockTimeZoneToggleOnBookingPage": {
+            "type": "boolean"
+          },
+          "color": {
+            "$ref": "#/components/schemas/EventTypeColor_2024_06_14"
+          },
+          "seats": {
+            "description": "Create an event type with multiple seats.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Seats_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "customName": {
+            "type": "string",
+            "description": "Customizable event name with valid variables:\n      {Event type title}, {Organiser}, {Scheduler}, {Location}, {Organiser first name},\n      {Scheduler first name}, {Scheduler last name}, {Event duration}, {LOCATION},\n      {HOST/ATTENDEE}, {HOST}, {ATTENDEE}, {USER}",
+            "example": "{Event type title} between {Organiser} and {Scheduler}"
+          },
+          "destinationCalendar": {
+            "$ref": "#/components/schemas/DestinationCalendar_2024_06_14"
+          },
+          "useDestinationCalendarEmail": {
+            "type": "boolean"
+          },
+          "hideCalendarEventDetails": {
+            "type": "boolean"
+          },
+          "successRedirectUrl": {
+            "type": "string",
+            "description": "A valid URL where the booker will redirect to, once the booking is completed successfully",
+            "example": "https://masterchief.com/argentina/flan/video/9129412"
+          },
+          "hideOrganizerEmail": {
+            "type": "boolean",
+            "description": "Boolean to Hide organizer's email address from the booking screen, email notifications, and calendar events"
+          },
+          "calVideoSettings": {
+            "description": "Cal video settings for the event type. Platform customers can't manage this property because currently we have no way of determining if managed user is a host or an attendee.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CalVideoSettings"
+              }
+            ]
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "bookingRequiresAuthentication": {
+            "type": "boolean",
+            "default": false,
+            "description": "Boolean to require authentication for booking this event type via api. If true, only authenticated users who are the event-type owner or org/team admin/owner can book this event type."
+          },
+          "disableCancelling": {
+            "description": "Settings for disabling cancelling of this event type.",
+            "example": {
+              "disabled": true
+            },
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DisableCancelling_2024_06_14"
+              }
+            ]
+          },
+          "disableRescheduling": {
+            "description": "Settings for disabling rescheduling of this event type. Can be always disabled or disabled when less than X minutes before the meeting.",
+            "example": {
+              "disabled": false,
+              "minutesBefore": 60
+            },
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DisableRescheduling_2024_06_14"
+              }
+            ]
+          },
+          "interfaceLanguage": {
+            "type": "string",
+            "description": "Set preferred language for the booking interface. Use empty string for visitor's browser language (default).",
+            "enum": [
+              "",
+              "en",
+              "ar",
+              "az",
+              "bg",
+              "bn",
+              "ca",
+              "cs",
+              "da",
+              "de",
+              "el",
+              "es",
+              "es-419",
+              "eu",
+              "et",
+              "fi",
+              "fr",
+              "he",
+              "hu",
+              "it",
+              "ja",
+              "km",
+              "ko",
+              "nl",
+              "no",
+              "pl",
+              "pt-BR",
+              "pt",
+              "ro",
+              "ru",
+              "sk-SK",
+              "sr",
+              "sv",
+              "tr",
+              "uk",
+              "vi",
+              "zh-CN",
+              "zh-TW"
+            ]
+          },
+          "allowReschedulingPastBookings": {
+            "type": "boolean",
+            "description": "Enabling this option allows for past events to be rescheduled.",
+            "default": false
+          },
+          "allowReschedulingCancelledBookings": {
+            "type": "boolean",
+            "description": "When enabled, users will be able to create a new booking when trying to reschedule a cancelled booking.",
+            "default": false
+          },
+          "showOptimizedSlots": {
+            "type": "boolean",
+            "description": "Arrange time slots to optimize availability.",
+            "default": false
+          },
+          "schedulingType": {
+            "type": "string",
+            "enum": ["collective", "roundRobin", "managed"],
+            "example": "collective",
+            "description": "The scheduling type for the team event - collective, roundRobin or managed."
+          },
+          "hosts": {
+            "description": "Hosts contain specific team members you want to assign to this event type, but if you want to assign all team members, use `assignAllTeamMembers: true` instead and omit this field. For platform customers the hosts can include userIds only of managed users. Provide either hosts or assignAllTeamMembers but not both",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Host"
+            }
+          },
+          "assignAllTeamMembers": {
+            "type": "boolean",
+            "description": "If true, all current and future team members will be assigned to this event type. Provide either assignAllTeamMembers or hosts but not both"
+          },
+          "locations": {
+            "type": "array",
+            "description": "Locations where the event will take place. If not provided, cal video link will be used as the location. Note: Setting a location to a conferencing app does not install the app - the app must already be installed. Via API, only Google Meet (google-meet), Microsoft Teams (office365-video), and Zoom (zoom) can be installed. Cal Video (cal-video) is installed by default. All other conferencing apps must be connected via the Cal.diy web app and are not available for Platform plan customers. You can only set an event type location to an app that has already been installed or connected.",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/InputAddressLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputLinkLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputIntegrationLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputPhoneLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputAttendeeAddressLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputAttendeePhoneLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputAttendeeDefinedLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputOrganizersDefaultApp_2024_06_14"
+                }
+              ]
+            }
+          },
+          "emailSettings": {
+            "description": "Email settings for this event type - only available for organization team event types.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmailSettings_2024_06_14"
+              }
+            ]
+          },
+          "rescheduleWithSameRoundRobinHost": {
+            "type": "boolean",
+            "description": "Rescheduled events will be assigned to the same host as initially scheduled."
+          }
+        },
+        "required": ["lengthInMinutes", "title", "slug", "schedulingType"]
+      },
+      "CreateTeamEventTypeOutput": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success",
+            "enum": ["success", "error"]
+          },
+          "data": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TeamEventTypeOutput_2024_06_14"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TeamEventTypeOutput_2024_06_14"
+                }
+              }
+            ]
+          }
+        },
+        "required": ["status", "data"]
+      },
+      "GetTeamEventTypeOutput": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success",
+            "enum": ["success", "error"]
+          },
+          "data": {
+            "$ref": "#/components/schemas/TeamEventTypeOutput_2024_06_14"
+          }
+        },
+        "required": ["status", "data"]
+      },
+      "GetTeamEventTypesOutput": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success",
+            "enum": ["success", "error"]
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamEventTypeOutput_2024_06_14"
+            }
+          }
+        },
+        "required": ["status", "data"]
+      },
+      "UpdateTeamEventTypeInput_2024_06_14": {
+        "type": "object",
+        "properties": {
+          "lengthInMinutes": {
+            "type": "number",
+            "example": 60
+          },
+          "lengthInMinutesOptions": {
+            "example": [15, 30, 60],
+            "description": "If you want that user can choose between different lengths of the event you can specify them here. Must include the provided `lengthInMinutes`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string",
+            "example": "Learn the secrets of masterchief!"
+          },
+          "slug": {
+            "type": "string",
+            "example": "learn-the-secrets-of-masterchief"
+          },
+          "description": {
+            "type": "string",
+            "example": "Discover the culinary wonders of the Argentina by making the best flan ever!"
+          },
+          "bookingFields": {
+            "type": "array",
+            "description": "Complete set of booking form fields. This array replaces all existing booking fields. To modify existing fields, first fetch the current event type, then include all desired fields in this array. Sending only one field will remove all other custom fields, keeping only default fields plus the provided one.",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/NameDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/EmailDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/TitleDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/LocationDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/NotesDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/GuestsDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/RescheduleReasonDefaultFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/PhoneFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/AddressFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/TextFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/NumberFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/TextAreaFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/SelectFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/MultiSelectFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/MultiEmailFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/CheckboxGroupFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/RadioGroupFieldInput_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/BooleanFieldInput_2024_06_14"
+                }
+              ]
+            }
+          },
+          "disableGuests": {
+            "type": "boolean",
+            "description": "If true, person booking this event can't add guests via their emails."
+          },
+          "slotInterval": {
+            "type": "number",
+            "description": "Number representing length of each slot when event is booked. By default it equal length of the event type.\n      If event length is 60 minutes then we would have slots 9AM, 10AM, 11AM etc. but if it was changed to 30 minutes then\n      we would have slots 9AM, 9:30AM, 10AM, 10:30AM etc. as the available times to book the 60 minute event."
+          },
+          "minimumBookingNotice": {
+            "type": "number",
+            "description": "Minimum number of minutes before the event that a booking can be made."
+          },
+          "beforeEventBuffer": {
+            "type": "number",
+            "description": "Extra time automatically blocked on your calendar before a meeting starts. This gives you time to prepare, review notes, or transition from your previous activity."
+          },
+          "afterEventBuffer": {
+            "type": "number",
+            "description": "Extra time automatically blocked on your calendar after a meeting ends. This gives you time to wrap up, add notes, or decompress before your next commitment."
+          },
+          "scheduleId": {
+            "type": "number",
+            "description": "If you want that this event has different schedule than user's default one you can specify it here."
+          },
+          "bookingLimitsCount": {
+            "description": "Limit how many times this event can be booked",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BaseBookingLimitsCount_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "bookerActiveBookingsLimit": {
+            "description": "Limit the number of active bookings a booker can make for this event type.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BookerActiveBookingsLimit_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "onlyShowFirstAvailableSlot": {
+            "type": "boolean",
+            "description": "This will limit your availability for this event type to one slot per day, scheduled at the earliest available time."
+          },
+          "bookingLimitsDuration": {
+            "description": "Limit total amount of time that this event can be booked",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BaseBookingLimitsDuration_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "bookingWindow": {
+            "description": "Limit how far in the future this event can be booked",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BusinessDaysWindow_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/CalendarDaysWindow_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/RangeWindow_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "offsetStart": {
+            "type": "number",
+            "description": "Offset timeslots shown to bookers by a specified number of minutes"
+          },
+          "bookerLayouts": {
+            "description": "Should booker have week, month or column view. Specify default layout and enabled layouts user can pick.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BookerLayouts_2024_06_14"
+              }
+            ]
+          },
+          "confirmationPolicy": {
+            "description": "Specify how the booking needs to be manually confirmed before it is pushed to the integrations and a confirmation mail is sent.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BaseConfirmationPolicy_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "recurrence": {
+            "description": "Create a recurring event type.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Recurrence_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "requiresBookerEmailVerification": {
+            "type": "boolean"
+          },
+          "hideCalendarNotes": {
+            "type": "boolean"
+          },
+          "lockTimeZoneToggleOnBookingPage": {
+            "type": "boolean"
+          },
+          "color": {
+            "$ref": "#/components/schemas/EventTypeColor_2024_06_14"
+          },
+          "seats": {
+            "description": "Create an event type with multiple seats.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Seats_2024_06_14"
+              },
+              {
+                "$ref": "#/components/schemas/Disabled_2024_06_14"
+              }
+            ]
+          },
+          "customName": {
+            "type": "string",
+            "description": "Customizable event name with valid variables:\n      {Event type title}, {Organiser}, {Scheduler}, {Location}, {Organiser first name},\n      {Scheduler first name}, {Scheduler last name}, {Event duration}, {LOCATION},\n      {HOST/ATTENDEE}, {HOST}, {ATTENDEE}, {USER}",
+            "example": "{Event type title} between {Organiser} and {Scheduler}"
+          },
+          "destinationCalendar": {
+            "$ref": "#/components/schemas/DestinationCalendar_2024_06_14"
+          },
+          "useDestinationCalendarEmail": {
+            "type": "boolean"
+          },
+          "hideCalendarEventDetails": {
+            "type": "boolean"
+          },
+          "successRedirectUrl": {
+            "type": "string",
+            "description": "A valid URL where the booker will redirect to, once the booking is completed successfully",
+            "example": "https://masterchief.com/argentina/flan/video/9129412"
+          },
+          "hideOrganizerEmail": {
+            "type": "boolean",
+            "description": "Boolean to Hide organizer's email address from the booking screen, email notifications, and calendar events"
+          },
+          "calVideoSettings": {
+            "description": "Cal video settings for the event type",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CalVideoSettings"
+              }
+            ]
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "bookingRequiresAuthentication": {
+            "type": "boolean",
+            "default": false,
+            "description": "Boolean to require authentication for booking this event type via api. If true, only authenticated users who are the event-type owner or org/team admin/owner can book this event type."
+          },
+          "disableCancelling": {
+            "description": "Settings for disabling cancelling of this event type.",
+            "example": {
+              "disabled": true
+            },
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DisableCancelling_2024_06_14"
+              }
+            ]
+          },
+          "disableRescheduling": {
+            "description": "Settings for disabling rescheduling of this event type. Can be always disabled or disabled when less than X minutes before the meeting.",
+            "example": {
+              "disabled": false,
+              "minutesBefore": 60
+            },
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DisableRescheduling_2024_06_14"
+              }
+            ]
+          },
+          "interfaceLanguage": {
+            "type": "string",
+            "description": "Set preferred language for the booking interface. Use empty string for visitor's browser language (default).",
+            "enum": [
+              "",
+              "en",
+              "ar",
+              "az",
+              "bg",
+              "bn",
+              "ca",
+              "cs",
+              "da",
+              "de",
+              "el",
+              "es",
+              "es-419",
+              "eu",
+              "et",
+              "fi",
+              "fr",
+              "he",
+              "hu",
+              "it",
+              "ja",
+              "km",
+              "ko",
+              "nl",
+              "no",
+              "pl",
+              "pt-BR",
+              "pt",
+              "ro",
+              "ru",
+              "sk-SK",
+              "sr",
+              "sv",
+              "tr",
+              "uk",
+              "vi",
+              "zh-CN",
+              "zh-TW"
+            ]
+          },
+          "allowReschedulingPastBookings": {
+            "type": "boolean",
+            "description": "Enabling this option allows for past events to be rescheduled.",
+            "default": false
+          },
+          "allowReschedulingCancelledBookings": {
+            "type": "boolean",
+            "description": "When enabled, users will be able to create a new booking when trying to reschedule a cancelled booking.",
+            "default": false
+          },
+          "showOptimizedSlots": {
+            "type": "boolean",
+            "description": "Arrange time slots to optimize availability.",
+            "default": false
+          },
+          "schedulingType": {
+            "type": "string",
+            "enum": ["collective", "roundRobin"],
+            "example": "collective",
+            "description": "The scheduling type for the team event - collective or roundRobin. ❗If you change scheduling type you must also provide `hosts` or `assignAllTeamMembers` in the request body, otherwise the event type will have no hosts - this is required because\n      in case of collective event type all hosts are mandatory but in case of round robin some or non can be mandatory so we can't predict how you want the hosts to be setup which is why you must provide that information.  If you want to convert round robin or collective into managed or managed into round robin or collective then you will have to create a new team event type and delete old one."
+          },
+          "hosts": {
+            "description": "Hosts contain specific team members you want to assign to this event type, but if you want to assign all team members, use `assignAllTeamMembers: true` instead and omit this field. For platform customers the hosts can include userIds only of managed users. Provide either hosts or assignAllTeamMembers but not both",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Host"
+            }
+          },
+          "assignAllTeamMembers": {
+            "type": "boolean",
+            "description": "If true, all current and future team members will be assigned to this event type. Provide either assignAllTeamMembers or hosts but not both"
+          },
+          "locations": {
+            "type": "array",
+            "description": "Locations where the event will take place. If not provided, cal video link will be used as the location. Note: Setting a location to a conferencing app does not install the app - the app must already be installed. Via API, only Google Meet (google-meet), Microsoft Teams (office365-video), and Zoom (zoom) can be installed. Cal Video (cal-video) is installed by default. All other conferencing apps must be connected via the Cal.diy web app and are not available for Platform plan customers. You can only set an event type location to an app that has already been installed or connected.",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/InputAddressLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputLinkLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputIntegrationLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputPhoneLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputAttendeeAddressLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputAttendeePhoneLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputAttendeeDefinedLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputOrganizersDefaultApp_2024_06_14"
+                }
+              ]
+            }
+          },
+          "emailSettings": {
+            "description": "Email settings for this event type. Only available for organization team event types.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EmailSettings_2024_06_14"
+              }
+            ]
+          },
+          "rescheduleWithSameRoundRobinHost": {
+            "type": "boolean",
+            "description": "Rescheduled events will be assigned to the same host as initially scheduled."
+          }
+        }
+      },
+      "UpdateTeamEventTypeOutput": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success",
+            "enum": ["success", "error"]
+          },
+          "data": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TeamEventTypeOutput_2024_06_14"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TeamEventTypeOutput_2024_06_14"
+                }
+              }
+            ]
+          }
+        },
+        "required": ["status", "data"]
+      },
+      "DeleteTeamEventTypeOutput": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success",
+            "enum": ["success", "error"]
+          },
+          "data": {
+            "type": "object"
           }
         },
         "required": ["status", "data"]
@@ -15713,6 +17013,115 @@
           }
         },
         "required": ["status"]
+      },
+      "ProvisionUserInput": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "agent@example.com"
+          },
+          "timeZone": {
+            "type": "string",
+            "example": "America/New_York",
+            "description": "Required so the user's default availability schedule is created in the right timezone."
+          },
+          "name": {
+            "type": "string",
+            "example": "Jane Agent"
+          },
+          "username": {
+            "type": "string",
+            "description": "Derived from the email local part when omitted."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "description": "Password for web-app login. Omit for SSO-only users."
+          },
+          "teamIds": {
+            "description": "Teams the user joins as an accepted MEMBER (required before they can be an event-type host).",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": ["email", "timeZone"]
+      },
+      "ProvisionedUserDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "email": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "defaultScheduleId": {
+            "type": "number",
+            "description": "Id of the default availability schedule created for the user."
+          },
+          "teamIds": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": ["id", "email", "username", "timeZone", "defaultScheduleId", "teamIds"]
+      },
+      "ProvisionUserOutput": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success",
+            "enum": ["success", "error"]
+          },
+          "data": {
+            "$ref": "#/components/schemas/ProvisionedUserDto"
+          }
+        },
+        "required": ["status", "data"]
+      },
+      "LoginTokenDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Single-use token; consume at the url below."
+          },
+          "url": {
+            "type": "string",
+            "description": "Full SSO url. Redirect the user's browser here to sign them in; append &next=/path to land them somewhere specific (defaults to the calendar dashboard)."
+          },
+          "expiresInSeconds": {
+            "type": "number",
+            "description": "Seconds until the token expires."
+          }
+        },
+        "required": ["token", "url", "expiresInSeconds"]
+      },
+      "LoginTokenOutput": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success",
+            "enum": ["success", "error"]
+          },
+          "data": {
+            "$ref": "#/components/schemas/LoginTokenDto"
+          }
+        },
+        "required": ["status", "data"]
       },
       "CalendarConnectionItem": {
         "type": "object",

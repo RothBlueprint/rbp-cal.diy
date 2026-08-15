@@ -1,45 +1,46 @@
-import { API_VERSIONS_VALUES } from "@/lib/api-versions";
-import { API_KEY_OR_ACCESS_TOKEN_HEADER } from "@/lib/docs/headers";
-import { GetUser } from "@/modules/auth/decorators/get-user/get-user.decorator";
-import { ApiAuthGuard } from "@/modules/auth/guards/api-auth/api-auth.guard";
-import {
-  ConferencingAppsOauthUrlOutputDto,
-  GetConferencingAppsOauthUrlResponseDto,
-} from "@/modules/conferencing/outputs/get-conferencing-apps-oauth-url";
-import {
-  ConferencingAppsOutputResponseDto,
-  ConferencingAppOutputResponseDto,
-  ConferencingAppsOutputDto,
-  DisconnectConferencingAppOutputResponseDto,
-} from "@/modules/conferencing/outputs/get-conferencing-apps.output";
-import { GetDefaultConferencingAppOutputResponseDto } from "@/modules/conferencing/outputs/get-default-conferencing-app.output";
-import { SetDefaultConferencingAppOutputResponseDto } from "@/modules/conferencing/outputs/set-default-conferencing-app.output";
-import { ConferencingService } from "@/modules/conferencing/services/conferencing.service";
-import { UserWithProfile } from "@/modules/users/users.repository";
+import { CAL_VIDEO, GOOGLE_MEET, OFFICE_365_VIDEO, SUCCESS_STATUS, ZOOM } from "@calcom/platform-constants";
 import { HttpService } from "@nestjs/axios";
-import { Logger } from "@nestjs/common";
 import {
-  Controller,
-  Get,
-  Query,
-  HttpCode,
-  HttpStatus,
-  UseGuards,
-  Post,
-  Param,
   BadRequestException,
+  Controller,
   Delete,
+  Get,
   Headers,
+  HttpCode,
+  HttpException,
+  HttpStatus,
+  Logger,
+  Param,
+  Post,
+  Query,
   Redirect,
   Req,
-  HttpException,
+  UseGuards,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ApiHeader, ApiOperation, ApiParam, ApiTags as DocsTags } from "@nestjs/swagger";
 import { plainToInstance } from "class-transformer";
 import { Request } from "express";
-
-import { GOOGLE_MEET, ZOOM, SUCCESS_STATUS, OFFICE_365_VIDEO, CAL_VIDEO } from "@calcom/platform-constants";
+import { API_VERSIONS_VALUES } from "@/lib/api-versions";
+import { API_KEY_OR_ACCESS_TOKEN_HEADER } from "@/lib/docs/headers";
+import type { SignedStatePayload } from "@/lib/oauth-state/signed-state";
+import { looksSigned, verifyState } from "@/lib/oauth-state/signed-state";
+import { GetUser } from "@/modules/auth/decorators/get-user/get-user.decorator";
+import { ApiAuthGuard } from "@/modules/auth/guards/api-auth/api-auth.guard";
+import {
+  ConferencingAppOutputResponseDto,
+  ConferencingAppsOutputDto,
+  ConferencingAppsOutputResponseDto,
+  DisconnectConferencingAppOutputResponseDto,
+} from "@/modules/conferencing/outputs/get-conferencing-apps.output";
+import {
+  ConferencingAppsOauthUrlOutputDto,
+  GetConferencingAppsOauthUrlResponseDto,
+} from "@/modules/conferencing/outputs/get-conferencing-apps-oauth-url";
+import { GetDefaultConferencingAppOutputResponseDto } from "@/modules/conferencing/outputs/get-default-conferencing-app.output";
+import { SetDefaultConferencingAppOutputResponseDto } from "@/modules/conferencing/outputs/set-default-conferencing-app.output";
+import { ConferencingService } from "@/modules/conferencing/services/conferencing.service";
+import { UserWithProfile } from "@/modules/users/users.repository";
 
 export type OAuthCallbackState = {
   accessToken: string;
@@ -148,7 +149,32 @@ export class ConferencingController {
       throw new BadRequestException("Missing `state` query param");
     }
 
-    const decodedCallbackState: OAuthCallbackState = JSON.parse(state);
+    // Admin-driven flows carry a signed state naming the target user (see
+    // lib/oauth-state/signed-state.ts). Verify BEFORE parsing anything out of it:
+    // this route is unguarded by necessity — the provider redirects a browser
+    // here — so the signature is the only thing proving the named user consented.
+    // A state that looks signed but fails verification is refused outright rather
+    // than falling through to the legacy JSON branch, which would let a forgery
+    // be downgraded into an unauthenticated path.
+    let signedState: SignedStatePayload | null = null;
+    if (looksSigned(state)) {
+      signedState = verifyState(state, this.config.get("next.authSecret", { infer: true }) ?? "");
+      if (!signedState) {
+        this.logger.error("Rejected a conferencing OAuth callback with an invalid signed state");
+        throw new BadRequestException("Invalid `state`");
+      }
+    }
+
+    const decodedCallbackState: OAuthCallbackState = signedState
+      ? {
+          // A signed state authenticates the USER, not an access token; there is
+          // none to carry. The downstream services only read the redirect fields.
+          accessToken: "",
+          returnTo: signedState.returnTo,
+          onErrorReturnTo: signedState.onErrorReturnTo,
+          fromApp: false,
+        }
+      : JSON.parse(state);
     try {
       if (error) {
         throw new BadRequestException(error_description);
@@ -171,7 +197,13 @@ export class ConferencingController {
         }
       }
 
-      return this.conferencingService.connectOauthApps(app, code, decodedCallbackState);
+      return this.conferencingService.connectOauthApps(
+        app,
+        code,
+        decodedCallbackState,
+        undefined,
+        signedState?.userId
+      );
     } catch (error) {
       if (error instanceof HttpException || error instanceof Error) {
         this.logger.error(error.message);
