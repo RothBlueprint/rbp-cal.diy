@@ -134,6 +134,50 @@ export class UsersAdminService {
     };
   }
 
+  /**
+   * Ensure `userId` is an accepted member of `teamId`. Idempotent.
+   *
+   * Team membership is a prerequisite for being a round-robin host — the event
+   * type's host update rejects a user who is not on the team. `provisionUser`
+   * covers that for a NEW user via `teamIds`, but there was no way to do it for
+   * one that already exists, so an agent adopted through the by-email conflict
+   * path (or provisioned before the pool existed) could complete setup and
+   * silently never be poolable.
+   */
+  async addUserToTeam(userId: number, teamId: number) {
+    await this.requireUser(userId);
+
+    const team = await this.dbWrite.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) {
+      throw new NotFoundException(`Team with id ${teamId} not found`);
+    }
+
+    const existing = await this.dbWrite.prisma.membership.findFirst({
+      where: { userId, teamId },
+    });
+    if (existing) {
+      // Already there. Accept it if it is still pending — an unaccepted
+      // membership is not enough to be a host, so returning early on one would
+      // reproduce the exact failure this method exists to prevent.
+      if (existing.accepted) {
+        return { id: existing.id, userId, teamId, accepted: true, created: false };
+      }
+      const accepted = await this.dbWrite.prisma.membership.update({
+        where: { id: existing.id },
+        data: { accepted: true },
+      });
+      return { id: accepted.id, userId, teamId, accepted: true, created: false };
+    }
+
+    const membership = await this.membershipsRepository.createMembership(
+      teamId,
+      userId,
+      "MEMBER",
+      true
+    );
+    return { id: membership.id, userId, teamId, accepted: true, created: true };
+  }
+
   async createLoginToken(userId: number, adminUserId: number) {
     await this.requireUser(userId);
 
