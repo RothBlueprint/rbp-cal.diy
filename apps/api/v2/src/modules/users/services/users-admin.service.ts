@@ -152,30 +152,31 @@ export class UsersAdminService {
       throw new NotFoundException(`Team with id ${teamId} not found`);
     }
 
-    const existing = await this.dbWrite.prisma.membership.findFirst({
-      where: { userId, teamId },
+    const existing = await this.dbWrite.prisma.membership.findUnique({
+      where: { userId_teamId: { userId, teamId } },
     });
-    if (existing) {
-      // Already there. Accept it if it is still pending — an unaccepted
-      // membership is not enough to be a host, so returning early on one would
-      // reproduce the exact failure this method exists to prevent.
-      if (existing.accepted) {
-        return { id: existing.id, userId, teamId, accepted: true, created: false };
-      }
-      const accepted = await this.dbWrite.prisma.membership.update({
-        where: { id: existing.id },
-        data: { accepted: true },
-      });
-      return { id: accepted.id, userId, teamId, accepted: true, created: false };
+    if (existing?.accepted) {
+      return { id: existing.id, userId, teamId, accepted: true, created: false };
     }
 
-    const membership = await this.membershipsRepository.createMembership(
-      teamId,
-      userId,
-      "MEMBER",
-      true
-    );
-    return { id: membership.id, userId, teamId, accepted: true, created: true };
+    // upsert, not check-then-create. Two activations can race — a double-submit,
+    // or the /calendar auto-complete firing beside an explicit activate — and
+    // both would pass the read above, then Membership's @@unique([userId, teamId])
+    // would 500 the loser. That is the opposite of the idempotency this endpoint
+    // exists to provide, and the caller reports it as "we couldn't set up your
+    // calendar just now".
+    //
+    // `update` also promotes a PENDING membership: unaccepted is not enough to be
+    // a host, so treating one as "already there" would reproduce the exact
+    // failure this method was added to prevent.
+    const membership = await this.dbWrite.prisma.membership.upsert({
+      where: { userId_teamId: { userId, teamId } },
+      create: { teamId, userId, role: "MEMBER", accepted: true, createdAt: new Date() },
+      update: { accepted: true },
+    });
+    // Advisory only — under a race the row may have been created by the other
+    // request. Nothing consumes it; it is here to make the logs legible.
+    return { id: membership.id, userId, teamId, accepted: true, created: !existing };
   }
 
   async createLoginToken(userId: number, adminUserId: number) {

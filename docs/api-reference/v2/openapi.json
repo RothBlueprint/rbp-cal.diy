@@ -6138,6 +6138,53 @@
         "tags": ["Users / Admin"]
       }
     },
+    "/v2/users/{userId}/teams/{teamId}": {
+      "post": {
+        "operationId": "UsersAdminController_addUserToTeam",
+        "summary": "Add a user to a team (admin only)",
+        "description": "Idempotent. Team membership is a prerequisite for being a round-robin host, and POST /v2/users only covers it for a NEW user via teamIds — so without this an existing or adopted user can never be pooled.",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "teamId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
     "/v2/users/{userId}/login-token": {
       "post": {
         "operationId": "UsersAdminController_createLoginToken",
