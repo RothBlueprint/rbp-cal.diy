@@ -134,6 +134,51 @@ export class UsersAdminService {
     };
   }
 
+  /**
+   * Ensure `userId` is an accepted member of `teamId`. Idempotent.
+   *
+   * Team membership is a prerequisite for being a round-robin host — the event
+   * type's host update rejects a user who is not on the team. `provisionUser`
+   * covers that for a NEW user via `teamIds`, but there was no way to do it for
+   * one that already exists, so an agent adopted through the by-email conflict
+   * path (or provisioned before the pool existed) could complete setup and
+   * silently never be poolable.
+   */
+  async addUserToTeam(userId: number, teamId: number) {
+    await this.requireUser(userId);
+
+    const team = await this.dbWrite.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) {
+      throw new NotFoundException(`Team with id ${teamId} not found`);
+    }
+
+    const existing = await this.dbWrite.prisma.membership.findUnique({
+      where: { userId_teamId: { userId, teamId } },
+    });
+    if (existing?.accepted) {
+      return { id: existing.id, userId, teamId, accepted: true, created: false };
+    }
+
+    // upsert, not check-then-create. Two activations can race — a double-submit,
+    // or the /calendar auto-complete firing beside an explicit activate — and
+    // both would pass the read above, then Membership's @@unique([userId, teamId])
+    // would 500 the loser. That is the opposite of the idempotency this endpoint
+    // exists to provide, and the caller reports it as "we couldn't set up your
+    // calendar just now".
+    //
+    // `update` also promotes a PENDING membership: unaccepted is not enough to be
+    // a host, so treating one as "already there" would reproduce the exact
+    // failure this method was added to prevent.
+    const membership = await this.dbWrite.prisma.membership.upsert({
+      where: { userId_teamId: { userId, teamId } },
+      create: { teamId, userId, role: "MEMBER", accepted: true, createdAt: new Date() },
+      update: { accepted: true },
+    });
+    // Advisory only — under a race the row may have been created by the other
+    // request. Nothing consumes it; it is here to make the logs legible.
+    return { id: membership.id, userId, teamId, accepted: true, created: !existing };
+  }
+
   async createLoginToken(userId: number, adminUserId: number) {
     await this.requireUser(userId);
 

@@ -85,6 +85,22 @@ export class UsersAdminController {
     };
   }
 
+  @Post("/:userId/teams/:teamId")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Add a user to a team (admin only)",
+    description:
+      "Idempotent. Team membership is a prerequisite for being a round-robin host, and POST /v2/users only covers it for a NEW user via teamIds — so without this an existing or adopted user can never be pooled.",
+  })
+  async addUserToTeam(
+    @Param("userId", ParseIntPipe) userId: number,
+    @Param("teamId", ParseIntPipe) teamId: number
+  ): Promise<AdminDataResponse> {
+    const data = await this.usersAdminService.addUserToTeam(userId, teamId);
+
+    return { status: SUCCESS_STATUS, data };
+  }
+
   @Post("/:userId/login-token")
   @ApiOperation({
     summary: "Mint a single-use SSO login token for a user (admin only)",
