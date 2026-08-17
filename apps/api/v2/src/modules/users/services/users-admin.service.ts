@@ -109,6 +109,31 @@ export class UsersAdminService {
     };
   }
 
+  /**
+   * The user owning `email`, or 404.
+   *
+   * Deliberately narrow: this is the recovery path for the 409 `provisionUser`
+   * throws, so it returns only what a provisioning caller needs to carry on —
+   * chiefly the id every other admin route is keyed on. It is not a user search.
+   */
+  async getUserByEmail(email: string) {
+    if (!email) {
+      throw new BadRequestException("email is required");
+    }
+
+    const user = await this.usersRepository.findByEmail(email);
+    if (!user) {
+      throw new NotFoundException(`User with email ${email} not found`);
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      timeZone: user.timeZone,
+    };
+  }
+
   async createLoginToken(userId: number, adminUserId: number) {
     await this.requireUser(userId);
 

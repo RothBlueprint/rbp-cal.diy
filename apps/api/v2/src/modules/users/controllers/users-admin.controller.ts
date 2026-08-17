@@ -61,6 +61,24 @@ export class UsersAdminController {
     };
   }
 
+  // Declared BEFORE the "/:userId/..." routes: Nest matches in declaration
+  // order, and a literal segment placed after a parameterised one of the same
+  // shape is shadowed by it.
+  @Get("/by-email")
+  @ApiOperation({
+    summary: "Look up a user by email (admin only)",
+    description:
+      "Returns the user owning this email, or 404. Exists so a provisioning caller can recover from the 409 POST /v2/users returns for an existing email — without it the user id, which every other admin route is keyed on, is unrecoverable.",
+  })
+  async getUserByEmail(@Query("email") email: string): Promise<AdminDataResponse> {
+    const data = await this.usersAdminService.getUserByEmail(email);
+
+    return {
+      status: SUCCESS_STATUS,
+      data,
+    };
+  }
+
   @Post("/:userId/login-token")
   @ApiOperation({
     summary: "Mint a single-use SSO login token for a user (admin only)",
