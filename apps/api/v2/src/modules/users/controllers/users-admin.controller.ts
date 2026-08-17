@@ -6,12 +6,18 @@ import {
   SUCCESS_STATUS,
   ZOOM,
 } from "@calcom/platform-constants";
-import type {
+// VALUE imports, not `import type`. These are the DTO classes Nest resolves at
+// runtime to drive the global ValidationPipe; a type-only import is erased, the
+// pipe gets no metatype to validate against, and — because it runs with
+// whitelist:true — every property is stripped as unrecognised. The handler then
+// receives {} and fails deep inside the tRPC layer as an opaque BAD_REQUEST,
+// with the request looking perfectly well-formed from outside.
+import {
   CreateEventTypeInput_2024_06_14,
   GetBookingsInput_2024_08_13,
-  GetBookingsOutput_2024_08_13,
   UpdateScheduleInput_2024_06_11,
 } from "@calcom/platform-types";
+import type { GetBookingsOutput_2024_08_13 } from "@calcom/platform-types";
 import {
   Body,
   Controller,
