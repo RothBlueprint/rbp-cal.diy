@@ -6099,6 +6099,45 @@
         "tags": ["Users / Admin"]
       }
     },
+    "/v2/users/by-email": {
+      "get": {
+        "operationId": "UsersAdminController_getUserByEmail",
+        "summary": "Look up a user by email (admin only)",
+        "description": "Returns the user owning this email, or 404. Exists so a provisioning caller can recover from the 409 POST /v2/users returns for an existing email — without it the user id, which every other admin route is keyed on, is unrecoverable.",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "email",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
     "/v2/users/{userId}/login-token": {
       "post": {
         "operationId": "UsersAdminController_createLoginToken",
@@ -6159,6 +6198,216 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings by status. If you want to filter by multiple statuses, separate them with a comma.",
+            "schema": {
+              "example": "?status=upcoming,past",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["upcoming", "recurring", "past", "cancelled", "unconfirmed"]
+              }
+            }
+          },
+          {
+            "name": "attendeeEmail",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings by the attendee's email address.",
+            "schema": {
+              "example": "example@domain.com",
+              "type": "string"
+            }
+          },
+          {
+            "name": "attendeeName",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings by the attendee's name.",
+            "schema": {
+              "example": "John Doe",
+              "type": "string"
+            }
+          },
+          {
+            "name": "bookingUid",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings by the booking Uid.",
+            "schema": {
+              "example": "2NtaeaVcKfpmSZ4CthFdfk",
+              "type": "string"
+            }
+          },
+          {
+            "name": "eventTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings by event type ids belonging to the user. Event type ids must be separated by a comma.",
+            "schema": {
+              "example": "?eventTypeIds=100,200",
+              "type": "string"
+            }
+          },
+          {
+            "name": "eventTypeId",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings by event type id belonging to the user.",
+            "schema": {
+              "example": "?eventTypeId=100",
+              "type": "string"
+            }
+          },
+          {
+            "name": "teamsIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings by team ids that user is part of. Team ids must be separated by a comma.",
+            "schema": {
+              "example": "?teamIds=50,60",
+              "type": "string"
+            }
+          },
+          {
+            "name": "teamId",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings by team id that user is part of",
+            "schema": {
+              "example": "?teamId=50",
+              "type": "string"
+            }
+          },
+          {
+            "name": "afterStart",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings with start after this date string.",
+            "schema": {
+              "example": "?afterStart=2025-03-07T10:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "beforeEnd",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings with end before this date string.",
+            "schema": {
+              "example": "?beforeEnd=2025-03-07T11:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "afterCreatedAt",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings that have been created after this date string.",
+            "schema": {
+              "example": "?afterCreatedAt=2025-03-07T10:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "beforeCreatedAt",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings that have been created before this date string.",
+            "schema": {
+              "example": "?beforeCreatedAt=2025-03-14T11:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "afterUpdatedAt",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings that have been updated after this date string.",
+            "schema": {
+              "example": "?afterUpdatedAt=2025-03-07T10:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "beforeUpdatedAt",
+            "required": false,
+            "in": "query",
+            "description": "Filter bookings that have been updated before this date string.",
+            "schema": {
+              "example": "?beforeUpdatedAt=2025-03-14T11:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortStart",
+            "required": false,
+            "in": "query",
+            "description": "Sort results by their start time in ascending or descending order.",
+            "schema": {
+              "example": "?sortStart=asc OR ?sortStart=desc",
+              "enum": ["asc", "desc"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortEnd",
+            "required": false,
+            "in": "query",
+            "description": "Sort results by their end time in ascending or descending order.",
+            "schema": {
+              "example": "?sortEnd=asc OR ?sortEnd=desc",
+              "enum": ["asc", "desc"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortCreated",
+            "required": false,
+            "in": "query",
+            "description": "Sort results by their creation time (when booking was made) in ascending or descending order.",
+            "schema": {
+              "example": "?sortCreated=asc OR ?sortCreated=desc",
+              "enum": ["asc", "desc"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortUpdatedAt",
+            "required": false,
+            "in": "query",
+            "description": "Sort results by their updated time (for example when booking status changes) in ascending or descending order.",
+            "schema": {
+              "example": "?sortUpdated=asc OR ?sortUpdated=desc",
+              "enum": ["asc", "desc"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "required": false,
+            "in": "query",
+            "description": "The number of items to return",
+            "schema": {
+              "default": 100,
+              "example": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "skip",
+            "required": false,
+            "in": "query",
+            "description": "The number of items to skip",
+            "schema": {
+              "default": 0,
+              "example": 0,
+              "type": "number"
+            }
           }
         ],
         "responses": {
@@ -6168,6 +6417,561 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GetBookingsOutput_2024_08_13"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/schedules": {
+      "get": {
+        "operationId": "UsersAdminController_getUserSchedules",
+        "summary": "Get a user's schedules (admin only)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/schedules/default": {
+      "get": {
+        "operationId": "UsersAdminController_getUserDefaultSchedule",
+        "summary": "Get a user's default schedule (admin only)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/schedules/{scheduleId}": {
+      "patch": {
+        "operationId": "UsersAdminController_updateUserSchedule",
+        "summary": "Update a user's schedule (admin only)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "scheduleId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateScheduleInput_2024_06_11"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/event-types": {
+      "post": {
+        "operationId": "UsersAdminController_createUserEventType",
+        "summary": "Create a personal event type for a user (admin only)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEventTypeInput_2024_06_14"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/conferencing": {
+      "get": {
+        "operationId": "UsersAdminController_getUserConferencingApps",
+        "summary": "Get a user's connected conferencing apps (admin only)",
+        "description": "Returns the raw credential rows (id, type, appId, invalid, …), NOT the narrowed ConferencingAppsOutputDto the user-scoped GET /v2/conferencing serialises through. That DTO exposes only id/type/userId and so drops `appId` — which is the app SLUG (\"zoom\", \"google-meet\", \"msteams\") and the only field that says which app a row is. `type` is the credential type (\"zoom_video\", \"google_video\", \"office365_video\"), a different string. Consumers should key off appId.",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/conferencing/default": {
+      "get": {
+        "operationId": "UsersAdminController_getUserDefaultConferencingApp",
+        "summary": "Get a user's default conferencing app (admin only)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/conferencing/{app}/oauth/auth-url": {
+      "get": {
+        "operationId": "UsersAdminController_getUserConferencingOAuthUrl",
+        "summary": "Start an OAuth conferencing connect for a user (admin only)",
+        "description": "Returns the provider consent URL for zoom or msteams. Redirect the user's browser straight to it: they approve at the provider, and the callback binds the credential to this user because the `state` is signed with their id. Unlike the user-scoped GET /v2/conferencing/{app}/oauth/auth-url, this needs no session or access token for the target user.",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "app",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": ["zoom", "msteams"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "returnTo",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "onErrorReturnTo",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/conferencing/{app}/connect": {
+      "post": {
+        "operationId": "UsersAdminController_connectUserNonOauthApp",
+        "summary": "Connect a user's non-OAuth conferencing app (admin only)",
+        "description": "Only google-meet, which has no OAuth of its own — it requires (and reuses) the user's existing Google Calendar connection. Zoom and Office 365 must be connected in the user's own session.",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "app",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": ["google-meet"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/conferencing/{app}/default": {
+      "post": {
+        "operationId": "UsersAdminController_setUserDefaultConferencingApp",
+        "summary": "Set a user's default conferencing app (admin only)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "app",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/calendars": {
+      "get": {
+        "operationId": "UsersAdminController_getUserCalendars",
+        "summary": "Get a user's connected calendars (admin only)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/calendars/{calendar}/connect": {
+      "get": {
+        "operationId": "UsersAdminController_getUserCalendarOAuthUrl",
+        "summary": "Start a calendar OAuth connect for a user (admin only)",
+        "description": "Returns the provider consent URL for google or office365. Redirect the user's browser straight to it; the callback binds the calendar to this user via the signed `state`. Unlike the user-scoped GET /v2/calendars/{calendar}/connect — which is restricted to API_KEY/ACCESS_TOKEN auth and therefore always connects the CALLER's calendar — this connects the named user's.",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "calendar",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": ["google", "office365"],
+              "type": "string"
+            }
+          },
+          {
+            "name": "returnTo",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/conferencing/{app}/disconnect": {
+      "delete": {
+        "operationId": "UsersAdminController_disconnectUserConferencingApp",
+        "summary": "Disconnect a user's conferencing app (admin only)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "app",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
                 }
               }
             }
