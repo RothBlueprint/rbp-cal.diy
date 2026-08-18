@@ -23,4 +23,17 @@ RUN yarn workspace @calcom/api-v2 run build
 
 EXPOSE 80
 
+# Secrets Manager hydration — see scripts/hydrate-env.js for why this exists.
+# Installed to /opt/hydrate, outside the repo's dependency graph, so it is
+# deployment plumbing rather than an app dependency and cannot collide on an
+# upstream merge.
+#
+# ENTRYPOINT, not a CMD wrapper: the deploy script runs `prisma migrate deploy`
+# as a one-off task with a containerOverrides command, which replaces CMD but
+# not entrypoint — migrations need the same hydrated env the service gets.
+COPY scripts/hydrate-env.js scripts/hydrate-env.sh /opt/hydrate/
+RUN chmod +x /opt/hydrate/hydrate-env.sh \
+  && npm install --prefix /opt/hydrate --no-save --omit=dev @aws-sdk/client-secrets-manager
+
+ENTRYPOINT ["/opt/hydrate/hydrate-env.sh"]
 CMD [ "yarn", "workspace", "@calcom/api-v2", "start:prod"]
