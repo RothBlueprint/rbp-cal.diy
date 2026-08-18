@@ -88,7 +88,16 @@ ENV NEXT_PUBLIC_WEBAPP_URL=$NEXT_PUBLIC_WEBAPP_URL \
 ENV NODE_ENV=production
 EXPOSE 3000
 
+# Secrets Manager hydration (scripts/hydrate-env.*). Installed to /opt/hydrate
+# rather than the repo's dependency graph on purpose: this is deployment
+# plumbing, not an app dependency, and keeping it out of package.json means it
+# cannot collide when merging upstream.
+COPY scripts/hydrate-env.js scripts/hydrate-env.sh /opt/hydrate/
+RUN chmod +x /opt/hydrate/hydrate-env.sh \
+  && npm install --prefix /opt/hydrate --no-save --omit=dev @aws-sdk/client-secrets-manager
+
 HEALTHCHECK --interval=30s --timeout=30s --retries=5 \
   CMD wget --spider http://localhost:3000 || exit 1
 
+ENTRYPOINT ["/opt/hydrate/hydrate-env.sh"]
 CMD ["/calcom/scripts/start.sh"]
