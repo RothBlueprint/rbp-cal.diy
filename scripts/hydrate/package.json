@@ -1,0 +1,9 @@
+{
+  "name": "rbp-hydrate-env",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Secrets Manager hydration for the cal containers. Deployment plumbing, deliberately outside the monorepo's dependency graph \u2014 see ../hydrate-env.js.",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "3.1112.0"
+  }
+}

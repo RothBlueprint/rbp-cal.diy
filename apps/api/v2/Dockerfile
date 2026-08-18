@@ -31,9 +31,14 @@ EXPOSE 80
 # ENTRYPOINT, not a CMD wrapper: the deploy script runs `prisma migrate deploy`
 # as a one-off task with a containerOverrides command, which replaces CMD but
 # not entrypoint — migrations need the same hydrated env the service gets.
+# package.json + package-lock.json come first so `npm ci` installs the EXACT
+# graph committed in scripts/hydrate/, not whatever resolves on build day. This
+# code reads credentials on every boot; its dependency set should be a fact in
+# git, not a function of the clock.
+COPY scripts/hydrate/package.json scripts/hydrate/package-lock.json /opt/hydrate/
+RUN npm ci --prefix /opt/hydrate --omit=dev
 COPY scripts/hydrate-env.js scripts/hydrate-env.sh /opt/hydrate/
-RUN chmod +x /opt/hydrate/hydrate-env.sh \
-  && npm install --prefix /opt/hydrate --no-save --omit=dev @aws-sdk/client-secrets-manager
+RUN chmod +x /opt/hydrate/hydrate-env.sh
 
 ENTRYPOINT ["/opt/hydrate/hydrate-env.sh"]
 CMD [ "yarn", "workspace", "@calcom/api-v2", "start:prod"]
