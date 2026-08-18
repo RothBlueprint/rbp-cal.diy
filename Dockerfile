@@ -92,9 +92,14 @@ EXPOSE 3000
 # rather than the repo's dependency graph on purpose: this is deployment
 # plumbing, not an app dependency, and keeping it out of package.json means it
 # cannot collide when merging upstream.
+# package.json + package-lock.json come first so `npm ci` installs the EXACT
+# graph committed in scripts/hydrate/, not whatever resolves on build day. This
+# code reads credentials on every boot; its dependency set should be a fact in
+# git, not a function of the clock.
+COPY scripts/hydrate/package.json scripts/hydrate/package-lock.json /opt/hydrate/
+RUN npm ci --prefix /opt/hydrate --omit=dev
 COPY scripts/hydrate-env.js scripts/hydrate-env.sh /opt/hydrate/
-RUN chmod +x /opt/hydrate/hydrate-env.sh \
-  && npm install --prefix /opt/hydrate --no-save --omit=dev @aws-sdk/client-secrets-manager
+RUN chmod +x /opt/hydrate/hydrate-env.sh
 
 HEALTHCHECK --interval=30s --timeout=30s --retries=5 \
   CMD wget --spider http://localhost:3000 || exit 1
