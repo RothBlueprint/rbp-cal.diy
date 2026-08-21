@@ -6,6 +6,7 @@ import { IS_CALCOM, WEBAPP_URL } from "@calcom/lib/constants";
 import { getPlaceholderAvatar } from "@calcom/lib/defaultAvatarImage";
 import { getUserAvatarUrl } from "@calcom/lib/getAvatarUrl";
 import { useIsStandalone } from "@calcom/lib/hooks/useIsStandalone";
+import { stripHiddenSettings } from "@calcom/lib/rbp/hidden-settings";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { IdentityProvider, UserPermissionRole } from "@calcom/prisma/enums";
 import { trpc } from "@calcom/trpc/react";
@@ -247,7 +248,10 @@ const getTabs = (
     }
   }
 
-  return tabs;
+  // RBP: agents arrive by SSO with no password and no API credentials, and
+  // renaming themselves breaks the booking URL rbp has already embedded. One
+  // call, so upstream can keep editing the array above without conflicting.
+  return stripHiddenSettings(tabs);
 };
 
 // The following keys are assigned to admin only

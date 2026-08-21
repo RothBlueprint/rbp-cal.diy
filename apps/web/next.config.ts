@@ -4,6 +4,11 @@ import type { NextConfig } from "next";
 import type { RouteHas } from "next/dist/lib/load-custom-routes";
 import { withAxiom } from "next-axiom";
 import i18nConfig from "@calcom/i18n/next-i18next.config";
+import {
+  RBP_HIDDEN_SETTINGS_PATHS,
+  RBP_HIDDEN_SETTINGS_REDIRECT,
+  RBP_HIDDEN_SETTINGS_SECTIONS,
+} from "@calcom/lib/rbp/hidden-settings";
 import packageJson from "./package.json";
 import {
   nextJsOrgRewriteConfig,
@@ -638,6 +643,21 @@ const nextConfig = (phase: string): NextConfig => {
             ]
           : []),
       ];
+
+      // RBP: the settings pages agents must not reach. Hiding them from the nav
+      // (SettingsLayoutAppDirClient) is cosmetic — a typed URL, a bookmark or the
+      // command palette all still resolve — so this is the part that enforces it.
+      // Both read the same list, so they cannot drift apart.
+      redirects.push(
+        ...[...RBP_HIDDEN_SETTINGS_PATHS, ...RBP_HIDDEN_SETTINGS_SECTIONS].map((source) => ({
+          source,
+          destination: RBP_HIDDEN_SETTINGS_REDIRECT,
+          // Not permanent: this is a product decision for the managed-agent
+          // model, not a moved page. A 308 would be cached by the browser and
+          // outlive the decision.
+          permanent: false,
+        }))
+      );
 
       if (process.env.NEXT_PUBLIC_WEBAPP_URL === "https://app.cal.com") {
         redirects.push(
