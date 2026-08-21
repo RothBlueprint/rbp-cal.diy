@@ -2,6 +2,8 @@ import { EventTypeRepository } from "@calcom/features/eventtypes/repositories/ev
 import { hasFilter } from "@calcom/features/filters/lib/hasFilter";
 import { checkRateLimitAndThrowError } from "@calcom/lib/checkRateLimitAndThrowError";
 import logger from "@calcom/lib/logger";
+import { rbpCanAccessTeamEventTypes } from "@calcom/lib/server/rbp-permission-check-service";
+import { TRPCError } from "@trpc/server";
 import type { PrismaClient } from "@calcom/prisma";
 import { prisma } from "@calcom/prisma";
 import type { Prisma } from "@calcom/prisma/client";
@@ -113,6 +115,20 @@ export const getEventTypesFromGroup = async ({
     });
 
     eventTypes.push(...userEventTypes);
+  }
+
+  // RBP: the enforcement point for team event-type visibility.
+  //
+  // This procedure is a plain authedProcedure and takes teamId straight from
+  // input, so filtering the group list is cosmetic — /event-types?teamId=1 asks
+  // for a team directly and would be served regardless. An agent is a member of
+  // the round-robin pool only so they can host on it; the event type itself is
+  // rbp's infrastructure.
+  if (teamId && !(await rbpCanAccessTeamEventTypes(ctx.user.id, teamId))) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "You do not have access to this team's event types",
+    });
   }
 
   if (teamId) {

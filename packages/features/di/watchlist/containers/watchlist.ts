@@ -25,13 +25,8 @@ import { prisma } from "@calcom/prisma";
 import { createContainer } from "@evyweb/ioctopus";
 import { watchlistModule } from "../modules/Watchlist.module";
 import { WATCHLIST_DI_TOKENS } from "../Watchlist.tokens";
+import { PermissionCheckService } from "@calcom/lib/server/rbp-permission-check-service";
 
-class PermissionCheckService {
-  constructor(_prisma?: unknown) {}
-  async checkPermission(..._args: unknown[]) { return true; }
-  async hasPermission(..._args: unknown[]) { return true; }
-  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> { return []; }
-}
 
 export const watchlistContainer= createContainer();
 
