@@ -1,11 +1,6 @@
 import type { Membership, Team } from "@calcom/prisma/client";
+import { PermissionCheckService } from "@calcom/lib/server/rbp-permission-check-service";
 
-class PermissionCheckService {
-  constructor(_prisma?: unknown) {}
-  async checkPermission(..._args: unknown[]) { return true; }
-  async hasPermission(..._args: unknown[]) { return true; }
-  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> { return []; }
-}
 
 type TeamMembershipWithTeam = Membership & {
   team: Team & {

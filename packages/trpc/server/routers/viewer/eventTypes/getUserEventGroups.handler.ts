@@ -10,13 +10,8 @@ import { TeamAccessUseCase } from "./teamAccessUseCase";
 import { EventGroupBuilder } from "./usecases/EventGroupBuilder";
 import { ProfilePermissionProcessor } from "./usecases/ProfilePermissionProcessor";
 import { EventTypeGroupFilter } from "./utils/EventTypeGroupFilter";
+import { PermissionCheckService } from "@calcom/lib/server/rbp-permission-check-service";
 
-class PermissionCheckService {
-  constructor(_prisma?: unknown) {}
-  async checkPermission(..._args: unknown[]) { return true; }
-  async hasPermission(..._args: unknown[]) { return true; }
-  async getTeamIdsWithPermission(..._args: unknown[]): Promise<number[]> { return []; }
-}
 
 type GetByViewerOptions = {
   ctx: {
@@ -56,8 +51,18 @@ export const getUserEventGroups = async ({ ctx, input }: GetByViewerOptions) => 
     filters: input?.filters,
   });
 
+  // RBP: "eventType.update", not "eventType.read".
+  //
+  // Upstream lists a team to anyone who can READ it, which includes plain
+  // MEMBERs. rbp's agents are members of the shared round-robin pool purely so
+  // they can be hosts on it, and the event type is infrastructure — its slug is
+  // in the URL every homepage lead is sent to. Listing it invites them into a
+  // page they cannot save, so it is not listed at all.
+  //
+  // Cosmetic on its own: getEventTypesFromGroup takes a teamId straight from
+  // input and is where this is actually enforced.
   const filteredEventTypeGroups = new EventTypeGroupFilter(eventTypeGroups, teamPermissionsMap)
-    .has("eventType.read")
+    .has("eventType.update")
     .get();
 
   // Process profiles with permissions

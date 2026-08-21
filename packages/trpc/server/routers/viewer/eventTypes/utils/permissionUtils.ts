@@ -1,8 +1,7 @@
 import { MembershipRole } from "@calcom/prisma/enums";
 
-const getResourcePermissions = async (..._args: unknown[]) => ({
-  canCreate: true, canEdit: true, canDelete: true, canRead: true
-});
+import { getResourcePermissions } from "@calcom/lib/server/rbp-permission-check-service";
+
 const Resource = { EventType: 'EventType' } as const;
 
 export interface TeamPermissions {
