@@ -39,6 +39,13 @@
 /** Exact hrefs removed from the settings nav and redirected away. */
 const RBP_HIDDEN_SETTINGS_PATHS = [
   "/settings/my-account/profile",
+  // Timezone, time format and week start. rbp owns the working-hours timezone
+  // through its own /calendar form and pushes it onto the Cal schedule; a second
+  // place to set it is a second answer to the same question.
+  "/settings/my-account/general",
+  // Availability is set on rbp's page. An away-block set only here would be
+  // invisible there, which reads as rbp losing the setting.
+  "/settings/my-account/out-of-office",
   "/settings/security/password",
   "/settings/security/two-factor-auth",
   "/settings/developer/webhooks",
@@ -46,7 +53,17 @@ const RBP_HIDDEN_SETTINGS_PATHS = [
   "/settings/developer/api-keys",
 ];
 
-/** Section landing pages that exist only to hold the children we removed. */
+/**
+ * Whole sections removed from the nav, children and all.
+ *
+ * Not the same as "every child happens to be hidden". Developer still holds an
+ * API-docs link pointing at /docs, and that route is not ours to redirect — it
+ * is a real page, just not one an agent who cannot obtain an API key has any use
+ * for. Dropping the section is the honest way to remove it without breaking a
+ * top-level route for everyone.
+ *
+ * These hrefs are redirected as well, since the section landing pages resolve.
+ */
 const RBP_HIDDEN_SETTINGS_SECTIONS = ["/settings/security", "/settings/developer"];
 
 /** Where a hidden page sends an agent instead. Somewhere they can act. */
@@ -62,9 +79,12 @@ const RBP_HIDDEN_SETTINGS_REDIRECT = "/settings/my-account/calendars";
  */
 function stripHiddenSettings(tabs) {
   const hidden = new Set(RBP_HIDDEN_SETTINGS_PATHS);
+  const hiddenSections = new Set(RBP_HIDDEN_SETTINGS_SECTIONS);
 
   return tabs.reduce((kept, tab) => {
     if (tab.href && hidden.has(tab.href)) return kept;
+    // A hidden SECTION goes wholesale, whatever it still contains.
+    if (tab.href && hiddenSections.has(tab.href)) return kept;
 
     if (!tab.children || tab.children.length === 0) {
       kept.push(tab);
