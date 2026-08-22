@@ -71,6 +71,15 @@ async function run(): Promise<void> {
       generateSwaggerForApp(app);
     }
 
+    // Node's default server.keepAliveTimeout is 5s, well under the rbp-public ALB's 120s
+    // idle_timeout: the ALB reuses a pooled connection just as the target sends FIN, and
+    // that race surfaces as a 502 with target_status_code="-". Keep-alive must OUTLIVE the
+    // ALB's idle window. The web app does the same via `next start --keepAliveTimeout`.
+    // `|| ` (not `??`) is deliberate: an empty or non-numeric value falls back to the
+    // default rather than to 0, which Node reads as "never time out".
+    app.getHttpAdapter().getHttpServer().keepAliveTimeout =
+      Number(process.env.KEEP_ALIVE_TIMEOUT) || 125000;
+
     await app.listen(port);
     logger.log(`Application started locally on port: ${port}`);
   } catch (error) {
