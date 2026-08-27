@@ -324,15 +324,22 @@ export class UsersAdminService {
     }
 
     // WebhookRepository.getSubscribersRaw is a UNION ALL of independent branches —
-    // platform, user, event type, managed parent, team — each filtered on active = true.
-    // So an ACTIVE user-scoped row aimed at this same receiver matches a booking on this
-    // event type alongside the row we are about to write, and rbp is notified twice.
+    // platform, user, event type, managed parent, team — each filtered on active = true
+    // AND on the fired trigger being in eventTriggers. So a user-scoped row aimed at this
+    // same receiver double-delivers only when it is active AND shares at least one
+    // trigger with what we are about to write. All three conditions matter: dropping the
+    // trigger test would reject, say, a MEETING_ENDED-only subscriber that can never
+    // collide, and a false conflict here blocks an agent's activation outright.
     //
-    // Refuse rather than create that state. Re-pointing the legacy row is destructive
+    // Refuse rather than create the overlap. Re-pointing the legacy row is destructive
     // and is a deliberate operator step (scripts/rbp-setup.ts with
     // RBP_ADOPT_USER_SCOPED_WEBHOOKS=1); an activation call must not do it silently.
-    // Inactive rows are ignored — every branch of that lookup requires active = true, so
-    // they deliver nothing.
+    //
+    // This is a check, not a lock. `POST /v2/webhooks` and `PATCH /v2/webhooks/:id` can
+    // create or reactivate a user-scoped row just after it passes, and no constraint can
+    // express a cross-scope invariant. Closing that would mean holding an advisory lock
+    // across three services for a window of milliseconds; the residual outcome is one
+    // duplicate delivery into idempotent handlers, which the sweep then reports.
     const conflictingUserWebhook = await this.dbWrite.prisma.webhook.findFirst({
       where: {
         userId,
@@ -340,13 +347,17 @@ export class UsersAdminService {
         teamId: null,
         subscriberUrl: body.subscriberUrl,
         active: true,
+        eventTriggers: { hasSome: body.eventTriggers },
       },
-      select: { id: true },
+      select: { id: true, eventTriggers: true },
     });
 
     if (conflictingUserWebhook) {
+      const overlap = conflictingUserWebhook.eventTriggers.filter((trigger) =>
+        body.eventTriggers.includes(trigger)
+      );
       throw new ConflictException(
-        `User ${userId} already has an active user-scoped webhook (${conflictingUserWebhook.id}) for ${body.subscriberUrl}, which would deliver alongside an event-type-scoped one — every booking on event type ${body.eventTypeId} would notify twice. Convert it first by running scripts/rbp-setup.ts with RBP_ADOPT_USER_SCOPED_WEBHOOKS=1, or deactivate it.`
+        `User ${userId} already has an active user-scoped webhook (${conflictingUserWebhook.id}) for ${body.subscriberUrl} sharing ${overlap.join(", ")}. It would deliver alongside an event-type-scoped one, so those triggers would notify twice on event type ${body.eventTypeId}. Convert it first by running scripts/rbp-setup.ts with RBP_ADOPT_USER_SCOPED_WEBHOOKS=1, or deactivate it.`
       );
     }
 

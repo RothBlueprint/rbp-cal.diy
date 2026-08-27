@@ -300,7 +300,24 @@ describe("UsersAdminController webhooks (e2e)", () => {
 
     expect(await webhookRepositoryFixture.getAllByEventTypeId(conflictEventType.id)).toHaveLength(0);
 
-    // Deactivated it can no longer deliver, so it is no longer a conflict.
+    // Narrowed to a trigger we do not ask for, it can no longer collide: subscriber
+    // selection matches on the fired trigger, so rejecting this would be a false
+    // conflict that blocks the agent's activation for no reason.
+    await webhookRepositoryFixture.setTriggers(legacy.id, ["MEETING_ENDED"]);
+
+    await request(app.getHttpServer())
+      .post(`/v2/users/${conflictAgent.id}/webhooks`)
+      .send({
+        eventTypeId: conflictEventType.id,
+        subscriberUrl: SUBSCRIBER_URL,
+        eventTriggers: TRIGGERS,
+      })
+      .expect(200);
+
+    expect(await webhookRepositoryFixture.getAllByEventTypeId(conflictEventType.id)).toHaveLength(1);
+
+    // Restore the overlap, then deactivate: inactive can no longer deliver either.
+    await webhookRepositoryFixture.setTriggers(legacy.id, ["BOOKING_CREATED"]);
     await webhookRepositoryFixture.deactivate(legacy.id);
 
     await request(app.getHttpServer())

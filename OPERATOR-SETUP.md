@@ -76,9 +76,10 @@ behind the shared ALB, a dedicated Neon database and an ElastiCache Serverless V
     webhook, so re-running it repairs drift. Steady state, per-agent webhooks are created
     by rbp at activation through `POST /v2/users/{userId}/webhooks`.
     **On the first prod run also set `RBP_ADOPT_USER_SCOPED_WEBHOOKS=1`** — user 1 has a
-    legacy user-scoped webhook that double-delivers every pool booking he hosts, and that
-    flag converts it to event-type scope. Without it that event type is skipped, not
-    silently duplicated. The flag is not needed on later runs.
+    legacy user-scoped webhook that double-delivers every pool booking he hosts. The flag
+    converts it to event-type scope, or deactivates it if that event type already has its
+    own webhook; either way the row survives, so both are reversible. Without the flag
+    nothing is changed and the case is reported instead. Not needed on later runs.
 12. 🔴 **Mint the production admin API key** for rbp: log into
     `calendar.rothblueprint.com` as an admin user and create an API key in settings (the
     v2 `/api-keys/refresh` endpoint is stubbed in this fork), or insert one directly. Store

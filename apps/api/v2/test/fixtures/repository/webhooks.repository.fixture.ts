@@ -26,6 +26,10 @@ export class WebhookRepositoryFixture {
     return this.prismaWriteClient.webhook.findUnique({ where: { id: webhookId } });
   }
 
+  async setTriggers(webhookId: string, eventTriggers: Prisma.WebhookUpdateInput["eventTriggers"]) {
+    return this.prismaWriteClient.webhook.update({ where: { id: webhookId }, data: { eventTriggers } });
+  }
+
   async deactivate(webhookId: string) {
     return this.prismaWriteClient.webhook.update({ where: { id: webhookId }, data: { active: false } });
   }

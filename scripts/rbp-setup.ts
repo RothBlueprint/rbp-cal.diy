@@ -166,7 +166,10 @@ async function ensurePersonalWebhooks(webhookUrl: string, webhookSecret: string)
         data: { eventTriggers: WEBHOOK_TRIGGERS, secret: webhookSecret, active: true },
       });
       console.log(`  eventType ${eventType.id} (user ${userId}): webhook ${existing.id} refreshed`);
-      await warnOnUserScopedWebhooks(userId, webhookUrl);
+      // Still reconcile: an event-type-scoped row already existing does not make a
+      // conflicting user-scoped one harmless, and this branch is where an already
+      // backfilled agent lands.
+      await reconcileUserScopedWebhooks(userId, webhookUrl);
       continue;
     }
 
@@ -181,14 +184,23 @@ async function ensurePersonalWebhooks(webhookUrl: string, webhookSecret: string)
     // delivery for the others. So it is opt-in. Without the flag we neither convert nor
     // add a second row — that leaves the pre-existing behaviour exactly as it was, and
     // says what to run.
-    // `active: true` matters here and ONLY here. An inactive row cannot deliver, so it
-    // is not a conflict: it must not block creation, and adopting it would revive
-    // something someone deliberately switched off. The `existing` lookup above must
-    // stay unfiltered by contrast — an inactive event-type-scoped row is the row we
-    // need to refresh, and skipping it would fall through to a create that the
-    // (eventTypeId, subscriberUrl) unique constraint rejects outright.
+    // `active` and trigger overlap matter here and ONLY here. Subscriber selection
+    // requires both, so an inactive row — or one sharing no trigger with WEBHOOK_TRIGGERS
+    // — cannot double-deliver: it must not block creation, and adopting it would either
+    // revive something deliberately switched off or silently repurpose a subscription
+    // that was doing something else. The `existing` lookup above must stay unfiltered by
+    // contrast — an inactive event-type-scoped row is the row we need to refresh, and
+    // skipping it would fall through to a write the (eventTypeId, subscriberUrl) unique
+    // constraint rejects outright.
     const userScoped = await prisma.webhook.findFirst({
-      where: { userId, eventTypeId: null, teamId: null, subscriberUrl: webhookUrl, active: true },
+      where: {
+        userId,
+        eventTypeId: null,
+        teamId: null,
+        subscriberUrl: webhookUrl,
+        active: true,
+        eventTriggers: { hasSome: WEBHOOK_TRIGGERS },
+      },
       select: { id: true, eventTriggers: true },
     });
 
@@ -218,12 +230,19 @@ async function ensurePersonalWebhooks(webhookUrl: string, webhookSecret: string)
       console.log(
         `  eventType ${eventType.id} (user ${userId}): converted user-scoped webhook ${userScoped.id} to event-type scope (was userId=${userId}, triggers=${userScoped.eventTriggers.join(",")})`
       );
-      await warnOnUserScopedWebhooks(userId, webhookUrl);
+      await reconcileUserScopedWebhooks(userId, webhookUrl);
       continue;
     }
 
-    const created = await prisma.webhook.create({
-      data: {
+    // upsert, not create: a concurrent sweep or an API activation can win the
+    // (eventTypeId, subscriberUrl) race between the lookup above and this write, and the
+    // unique constraint would then abort main() and strand every later event type.
+    const created = await prisma.webhook.upsert({
+      where: {
+        eventTypeId_subscriberUrl: { eventTypeId: eventType.id, subscriberUrl: webhookUrl },
+      },
+      update: { eventTriggers: WEBHOOK_TRIGGERS, secret: webhookSecret, active: true },
+      create: {
         id: randomUUID(),
         eventTypeId: eventType.id,
         subscriberUrl: webhookUrl,
@@ -238,20 +257,43 @@ async function ensurePersonalWebhooks(webhookUrl: string, webhookSecret: string)
 }
 
 /**
- * An ACTIVE user-scoped row surviving next to an event-type-scoped one double-delivers.
- * Report rather than delete: this only happens when someone made a webhook by hand, and
- * the script has no way to tell which of the two they meant to keep. Inactive rows are
- * ignored — subscriber selection requires active = true, so they deliver nothing.
+ * Deal with user-scoped rows that would deliver alongside the event-type-scoped one.
+ *
+ * Only rows that can actually collide count: subscriber selection requires active = true
+ * AND that the fired trigger is in eventTriggers, so an inactive row, or one sharing no
+ * trigger with WEBHOOK_TRIGGERS, delivers nothing extra and is left alone and unreported.
+ *
+ * With the adopt flag the colliding row is DEACTIVATED rather than deleted — that ends
+ * the duplicate delivery while keeping the row, its id and its triggers intact, so the
+ * decision is reversible with a single UPDATE. Without the flag it is only reported: the
+ * script cannot know which of the two subscriptions was intended.
  */
-async function warnOnUserScopedWebhooks(userId: number, webhookUrl: string) {
-  const leftovers = await prisma.webhook.findMany({
-    where: { userId, eventTypeId: null, teamId: null, subscriberUrl: webhookUrl, active: true },
-    select: { id: true },
+async function reconcileUserScopedWebhooks(userId: number, webhookUrl: string) {
+  const colliding = await prisma.webhook.findMany({
+    where: {
+      userId,
+      eventTypeId: null,
+      teamId: null,
+      subscriberUrl: webhookUrl,
+      active: true,
+      eventTriggers: { hasSome: WEBHOOK_TRIGGERS },
+    },
+    select: { id: true, eventTriggers: true },
   });
 
-  for (const leftover of leftovers) {
-    console.warn(
-      `    WARNING: user-scoped webhook ${leftover.id} (user ${userId}) also targets ${webhookUrl}. It double-delivers alongside the event-type-scoped one and fires on pool bookings too - delete it by hand.`
+  for (const webhook of colliding) {
+    const shared = webhook.eventTriggers.filter((trigger) => WEBHOOK_TRIGGERS.includes(trigger));
+
+    if (!ADOPT_USER_SCOPED) {
+      console.warn(
+        `    WARNING: user-scoped webhook ${webhook.id} (user ${userId}) also targets ${webhookUrl} and shares ${shared.join(",")}. Those triggers deliver twice, here and on this user's pool bookings. Re-run with ${ADOPT_ENV_VAR}=1 to deactivate it, or reconcile it by hand.`
+      );
+      continue;
+    }
+
+    await prisma.webhook.update({ where: { id: webhook.id }, data: { active: false } });
+    console.log(
+      `    deactivated user-scoped webhook ${webhook.id} (user ${userId}, shared ${shared.join(",")}) - the event-type-scoped row covers it now`
     );
   }
 }
