@@ -2983,7 +2983,7 @@ __metadata:
     ts-node: "npm:10.9.2"
     uuid: "npm:8.3.2"
     zod: "npm:3.25.76"
-    zod-prisma-types: "npm:3.2.4"
+    zod-prisma-types: "patch:zod-prisma-types@npm%3A3.2.4#~/.yarn/patches/zod-prisma-types-npm-3.2.4-98242274eb.patch"
   bin:
     prisma-enum-generator: ./run-enum-generator.js
   languageName: unknown
@@ -3200,7 +3200,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@calcom/types@workspace:packages/types"
   dependencies:
-    "@types/node": "npm:20.17.23"
+    "@types/node": "npm:^24.13.3"
   languageName: unknown
   linkType: soft
 
@@ -16777,12 +16777,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^20.17.23":
-  version: 20.17.23
-  resolution: "@types/node@npm:20.17.23"
+"@types/node@npm:^24.13.3":
+  version: 24.13.3
+  resolution: "@types/node@npm:24.13.3"
   dependencies:
-    undici-types: "npm:~6.19.2"
-  checksum: 10/162fee54e25b464de91da1c0744f421c0d6301925893f5d8e48effeae321d343c87fa7f8eefc53384bf86cae3974bb1740830d4b62754383b18f2d3dff4e1fe9
+    undici-types: "npm:~7.18.0"
+  checksum: 10/cfa6ed1e16c4624d1e83b09aeb72a2f50a7e17d837bf5a1259a52e346f33a693afd289402d3b6118ce3abea7aff35f2a4f13a0284b96bc5807a50f0e22e1ec77
   languageName: node
   linkType: hard
 
@@ -40399,10 +40399,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"undici-types@npm:~6.19.2":
-  version: 6.19.8
-  resolution: "undici-types@npm:6.19.8"
-  checksum: 10/cf0b48ed4fc99baf56584afa91aaffa5010c268b8842f62e02f752df209e3dea138b372a60a963b3b2576ed932f32329ce7ddb9cb5f27a6c83040d8cd74b7a70
+"undici-types@npm:~7.18.0":
+  version: 7.18.2
+  resolution: "undici-types@npm:7.18.2"
+  checksum: 10/e61a5918f624d68420c3ca9d301e9f15b61cba6e97be39fe2ce266dd6151e4afe424d679372638826cb506be33952774e0424141200111a9857e464216c009af
   languageName: node
   linkType: hard
 
@@ -42298,6 +42298,23 @@ __metadata:
   bin:
     zod-prisma-types: dist/bin.js
   checksum: 10/efee5f138ca36108eba876df49819de9c94a4c7e64aca42f5af0082af1026182e1cc55720bb4512962818f4cd3f30c913d175e88740d8a0af1cc499c03094188
+  languageName: node
+  linkType: hard
+
+"zod-prisma-types@patch:zod-prisma-types@npm%3A3.2.4#~/.yarn/patches/zod-prisma-types-npm-3.2.4-98242274eb.patch":
+  version: 3.2.4
+  resolution: "zod-prisma-types@patch:zod-prisma-types@npm%3A3.2.4#~/.yarn/patches/zod-prisma-types-npm-3.2.4-98242274eb.patch::version=3.2.4&hash=dab01d"
+  dependencies:
+    "@prisma/generator-helper": "npm:^6.3.0"
+    code-block-writer: "npm:^12.0.0"
+    lodash: "npm:^4.17.21"
+    zod: "npm:^3.24.1"
+  peerDependencies:
+    "@prisma/client": ^4.x.x || ^5.x.x || ^6.x.x
+    prisma: ^4.x.x || ^5.x.x || ^6.x.x
+  bin:
+    zod-prisma-types: dist/bin.js
+  checksum: 10/dc20665a13d64b63251236332eb6220b7681a1a1627b98c4c3a55f0641e919642c4915a8e1c0b1c0676ddd66f90a82c16603d05b40cf3a020e9dd2c29a7f8411
   languageName: node
   linkType: hard
 

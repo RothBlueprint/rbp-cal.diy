@@ -1,12 +1,20 @@
-FROM node:20-alpine AS build
+# Node 20 went EOL 2026-04-30 — no further security patches. 24 is the active LTS
+# (EOL 2028-04-30). Staying on alpine/musl rather than moving to slim: sharp and the
+# other prebuild-install deps resolved musl binaries when this tree was installed, and
+# switching libc would re-resolve all of them for no security gain over -slim.
+FROM node:24-alpine AS build
 
 ARG DATABASE_DIRECT_URL
 ARG DATABASE_URL
 
 WORKDIR /calcom
 
-RUN set -eux;
-RUN ln -s /usr/lib/libssl.so.3 /lib/libssl.so.3
+# Historic workaround for Prisma's native query engine finding OpenSSL on musl.
+# Very likely dead now — schema.prisma sets engineType = "client", so there is no
+# native engine to link — but it is cheap to keep and expensive to be wrong about.
+# -f, and tolerant of failure, so a base image that already provides the path (or
+# moves it) cannot fail the build the way a bare `ln -s` would.
+RUN ln -sf /usr/lib/libssl.so.3 /lib/libssl.so.3 || true
 
 ENV NODE_ENV="production"
 ENV NODE_OPTIONS="--max-old-space-size=8192"

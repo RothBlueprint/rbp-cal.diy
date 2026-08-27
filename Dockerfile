@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM node:20 AS builder
+FROM --platform=$BUILDPLATFORM node:24 AS builder
 
 WORKDIR /calcom
 
@@ -41,7 +41,6 @@ COPY apps/api/v2 ./apps/api/v2
 COPY packages ./packages
 
 RUN yarn config set httpTimeout 1200000
-RUN npx turbo prune --scope=@calcom/web --scope=@calcom/trpc --docker
 RUN yarn install
 # Build and make embed servable from web/public/embed folder
 RUN yarn workspace @calcom/trpc run build
@@ -50,7 +49,7 @@ RUN yarn --cwd apps/web workspace @calcom/web run copy-app-store-static
 RUN yarn --cwd apps/web workspace @calcom/web run build
 RUN rm -rf node_modules/.cache .yarn/cache apps/web/.next/cache
 
-FROM node:20 AS builder-two
+FROM node:24 AS builder-two
 
 WORKDIR /calcom
 ARG NEXT_PUBLIC_WEBAPP_URL=http://localhost:3000
@@ -74,11 +73,19 @@ ENV NEXT_PUBLIC_WEBAPP_URL=$NEXT_PUBLIC_WEBAPP_URL \
 
 RUN scripts/replace-placeholder.sh http://NEXT_PUBLIC_WEBAPP_URL_PLACEHOLDER ${NEXT_PUBLIC_WEBAPP_URL}
 
-FROM node:20 AS runner
+# Node 20 went EOL 2026-04-30 — no further security patches. 24 is the active LTS
+# (EOL 2028-04-30). The runner is -slim while the builders above are not: slim drops
+# the compiler toolchain the builders need, and this is the only stage that ships, so
+# it is the only one whose OS package surface a scanner sees.
+FROM node:24-slim AS runner
 
 WORKDIR /calcom
 
-RUN apt-get update && apt-get install -y --no-install-recommends netcat-openbsd wget && rm -rf /var/lib/apt/lists/*
+# openssl and ca-certificates are implied by the full image but not by slim, and
+# start.sh runs `prisma migrate deploy` against a TLS Postgres on boot.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  netcat-openbsd wget openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder-two /calcom ./
 ARG NEXT_PUBLIC_WEBAPP_URL=http://localhost:3000
