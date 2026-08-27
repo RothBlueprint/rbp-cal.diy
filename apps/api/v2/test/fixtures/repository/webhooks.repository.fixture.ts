@@ -17,6 +17,23 @@ export class WebhookRepositoryFixture {
     return this.prismaWriteClient.webhook.create({ data });
   }
 
+  async getAllByEventTypeId(eventTypeId: number) {
+    // Write client on purpose: these are read-after-write assertions.
+    return this.prismaWriteClient.webhook.findMany({ where: { eventTypeId } });
+  }
+
+  async getById(webhookId: string) {
+    return this.prismaWriteClient.webhook.findUnique({ where: { id: webhookId } });
+  }
+
+  async setTriggers(webhookId: string, eventTriggers: Prisma.WebhookUpdateInput["eventTriggers"]) {
+    return this.prismaWriteClient.webhook.update({ where: { id: webhookId }, data: { eventTriggers } });
+  }
+
+  async deactivate(webhookId: string) {
+    return this.prismaWriteClient.webhook.update({ where: { id: webhookId }, data: { active: false } });
+  }
+
   async delete(webhookId: string) {
     return this.prismaWriteClient.webhook.delete({ where: { id: webhookId } });
   }

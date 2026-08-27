@@ -33,6 +33,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiHeader, ApiOperation, ApiParam, ApiTags as DocsTags } from "@nestjs/swagger";
+import { plainToClass } from "class-transformer";
 import { API_VERSIONS_VALUES } from "@/lib/api-versions";
 import { API_KEY_HEADER } from "@/lib/docs/headers";
 import { GetUser } from "@/modules/auth/decorators/get-user/get-user.decorator";
@@ -42,6 +43,12 @@ import { ProvisionUserInput } from "@/modules/users/inputs/provision-user.input"
 import { LoginTokenOutput } from "@/modules/users/outputs/login-token.output";
 import { ProvisionUserOutput } from "@/modules/users/outputs/provision-user.output";
 import { UsersAdminService } from "@/modules/users/services/users-admin.service";
+import { UpsertUserWebhookInputDto } from "@/modules/webhooks/inputs/admin-user-webhook.input";
+import {
+  EventTypeWebhookOutputDto,
+  EventTypeWebhookOutputResponseDto,
+} from "@/modules/webhooks/outputs/event-type-webhook.output";
+import { WebhookOutputPipe } from "@/modules/webhooks/pipes/WebhookOutputPipe";
 
 type AdminStatusResponse = { status: typeof SUCCESS_STATUS };
 type AdminDataResponse = AdminStatusResponse & { data: unknown };
@@ -184,6 +191,33 @@ export class UsersAdminController {
     const data = await this.usersAdminService.createUserEventType(userId, body);
 
     return { status: SUCCESS_STATUS, data };
+  }
+
+  // ── Webhooks (admin-on-behalf-of) ─────────────────────────────────────────
+  //
+  // Sits next to POST /:userId/event-types because it completes it: creating an
+  // agent's personal event type without a subscriber is what left bookings on the
+  // /a/<slug> funnel invisible to rbp.
+
+  @Post("/:userId/webhooks")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Create or refresh a webhook on a user's personal event type (admin only)",
+    description:
+      "Writes an EVENT-TYPE-scoped webhook (userId and teamId stay NULL) for an event type owned by {userId}. Idempotent on (eventTypeId, subscriberUrl): a repeat call refreshes triggers/active in place — and secret/payloadTemplate when supplied — rather than adding a second subscriber, so it is safe to call on every provisioning run. Returns 200 for both create and refresh. The event type must be personal; a team event type is rejected, since team-scoped delivery never fires in this fork.",
+  })
+  async upsertUserWebhook(
+    @Param("userId", ParseIntPipe) userId: number,
+    @Body() body: UpsertUserWebhookInputDto
+  ): Promise<EventTypeWebhookOutputResponseDto> {
+    const webhook = await this.usersAdminService.upsertUserWebhook(userId, body);
+
+    return {
+      status: SUCCESS_STATUS,
+      data: plainToClass(EventTypeWebhookOutputDto, new WebhookOutputPipe().transform(webhook), {
+        strategy: "excludeAll",
+      }),
+    };
   }
 
   // ── Conferencing (admin-on-behalf-of) ─────────────────────────────────────

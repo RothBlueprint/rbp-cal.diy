@@ -20,7 +20,7 @@ export class EventTypeWebhookOutputResponseDto {
 
   @Expose()
   @ValidateNested()
-  @Type(() => WebhookOutputDto)
+  @Type(() => EventTypeWebhookOutputDto)
   data!: EventTypeWebhookOutputDto;
 }
 
@@ -32,6 +32,6 @@ export class EventTypeWebhooksOutputResponseDto {
 
   @Expose()
   @ValidateNested()
-  @Type(() => WebhookOutputDto)
+  @Type(() => EventTypeWebhookOutputDto)
   data!: EventTypeWebhookOutputDto[];
 }

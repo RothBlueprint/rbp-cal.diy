@@ -1166,6 +1166,13 @@ model Webhook {
 
   @@unique([userId, subscriberUrl], name: "courseIdentifier")
   @@unique([platformOAuthClientId, subscriberUrl], name: "oauthclientwebhook")
+  // Mirrors the two above for event-type scope, which upstream left unconstrained
+  // even though the API has always treated the pair as unique (createEventTypeWebhook
+  // 409s on it). Without it the provisioning upsert is a find-then-create race: two
+  // overlapping activations both see no row and both insert, and every booking on
+  // that event type is then delivered twice. NULL eventTypeId rows (user-, team- and
+  // oAuth-scoped webhooks) are unaffected — Postgres treats NULLs as distinct.
+  @@unique([eventTypeId, subscriberUrl])
   @@index([active])
 }
 

@@ -10,6 +10,7 @@ import { CreationSource } from "@calcom/prisma/client";
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -21,6 +22,8 @@ import { MembershipsRepository } from "@/modules/memberships/memberships.reposit
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
 import { ProvisionUserInput } from "@/modules/users/inputs/provision-user.input";
 import { UsersRepository } from "@/modules/users/users.repository";
+import { UpsertUserWebhookInputDto } from "@/modules/webhooks/inputs/admin-user-webhook.input";
+import { EventTypeWebhooksService } from "@/modules/webhooks/services/event-type-webhooks.service";
 import { BookingsService_2024_08_13 } from "@/platform/bookings/2024-08-13/services/bookings.service";
 import { CalendarsService } from "@/platform/calendars/services/calendars.service";
 import { GoogleCalendarService } from "@/platform/calendars/services/gcal.service";
@@ -47,6 +50,7 @@ export class UsersAdminService {
     private readonly conferencingService: ConferencingService,
     private readonly eventTypesService: EventTypesService_2024_06_14,
     private readonly inputEventTypesService: InputEventTypesService_2024_06_14,
+    private readonly eventTypeWebhooksService: EventTypeWebhooksService,
     private readonly calendarsService: CalendarsService,
     private readonly googleCalendarService: GoogleCalendarService,
     private readonly outlookService: OutlookService,
@@ -262,6 +266,102 @@ export class UsersAdminService {
     );
 
     return await this.eventTypesService.createUserEventType(user, transformed);
+  }
+
+  // ── Webhooks (admin-on-behalf-of) ─────────────────────────────────────────
+  //
+  // The public POST /v2/webhooks creates for whoever the bearer token IS, so an
+  // admin key can only ever mint the admin's own webhooks — which is why nothing
+  // was notifying rbp about bookings on an agent's personal event type. This route
+  // takes the owner as a path param instead and writes an EVENT-TYPE-scoped row.
+  //
+  // Event-type scope is not a preference, it is the only shape that works here:
+  // getWebhooks.ts matches subscribers with a flat OR, so a user-scoped row would
+  // also match every round-robin booking that user hosts and deliver those twice,
+  // and a team-scoped row never fires at all (UPSTREAM-BUGS.md #1).
+
+  /**
+   * Create-or-refresh an event-type-scoped webhook on a user's personal event type.
+   *
+   * Idempotent on (eventTypeId, subscriberUrl): rbp calls this on every agent
+   * activation, re-runs included, and must not accumulate duplicate subscribers.
+   */
+  async upsertUserWebhook(userId: number, body: UpsertUserWebhookInputDto) {
+    await this.requireUser(userId);
+
+    // Read through the write client: the ownership check and the row it authorises
+    // have to see the same database. The event type is frequently created seconds
+    // earlier in the same provisioning run, and replica lag here would 404 it.
+    const eventType = await this.dbWrite.prisma.eventType.findUnique({
+      where: { id: body.eventTypeId },
+      select: { id: true, userId: true, teamId: true, parentId: true },
+    });
+
+    if (!eventType) {
+      throw new NotFoundException(`Event type with id ${body.eventTypeId} not found`);
+    }
+
+    if (eventType.teamId !== null) {
+      throw new BadRequestException(
+        `Event type ${body.eventTypeId} belongs to team ${eventType.teamId}, not to a user. Team event type webhooks are provisioned by scripts/rbp-setup.ts.`
+      );
+    }
+
+    // A managed event type child looks personal — it carries the member's userId and a
+    // null teamId — but subscribing to it duplicates delivery: getWebhooks.ts resolves
+    // the booked child's parentId and matches webhooks on BOTH the child and its
+    // managed parent. scripts/rbp-setup.ts skips these for the same reason.
+    if (eventType.parentId !== null) {
+      throw new BadRequestException(
+        `Event type ${body.eventTypeId} is a managed event type child of ${eventType.parentId}. Subscribe on the parent instead: the subscriber lookup matches a child booking against both, so a webhook here would deliver twice.`
+      );
+    }
+
+    if (eventType.userId !== userId) {
+      throw new ForbiddenException(
+        `Event type ${body.eventTypeId} is not owned by user ${userId}, so a webhook for it cannot be created here.`
+      );
+    }
+
+    // WebhookRepository.getSubscribersRaw is a UNION ALL of independent branches —
+    // platform, user, event type, managed parent, team — each filtered on active = true
+    // AND on the fired trigger being in eventTriggers. So a user-scoped row aimed at this
+    // same receiver double-delivers only when it is active AND shares at least one
+    // trigger with what we are about to write. All three conditions matter: dropping the
+    // trigger test would reject, say, a MEETING_ENDED-only subscriber that can never
+    // collide, and a false conflict here blocks an agent's activation outright.
+    //
+    // Refuse rather than create the overlap. Re-pointing the legacy row is destructive
+    // and is a deliberate operator step (scripts/rbp-setup.ts with
+    // RBP_ADOPT_USER_SCOPED_WEBHOOKS=1); an activation call must not do it silently.
+    //
+    // This is a check, not a lock. `POST /v2/webhooks` and `PATCH /v2/webhooks/:id` can
+    // create or reactivate a user-scoped row just after it passes, and no constraint can
+    // express a cross-scope invariant. Closing that would mean holding an advisory lock
+    // across three services for a window of milliseconds; the residual outcome is one
+    // duplicate delivery into idempotent handlers, which the sweep then reports.
+    const conflictingUserWebhook = await this.dbWrite.prisma.webhook.findFirst({
+      where: {
+        userId,
+        eventTypeId: null,
+        teamId: null,
+        subscriberUrl: body.subscriberUrl,
+        active: true,
+        eventTriggers: { hasSome: body.eventTriggers },
+      },
+      select: { id: true, eventTriggers: true },
+    });
+
+    if (conflictingUserWebhook) {
+      const overlap = conflictingUserWebhook.eventTriggers.filter((trigger) =>
+        body.eventTriggers.includes(trigger)
+      );
+      throw new ConflictException(
+        `User ${userId} already has an active user-scoped webhook (${conflictingUserWebhook.id}) for ${body.subscriberUrl} sharing ${overlap.join(", ")}. It would deliver alongside an event-type-scoped one, so those triggers would notify twice on event type ${body.eventTypeId}. Convert it first by running scripts/rbp-setup.ts with RBP_ADOPT_USER_SCOPED_WEBHOOKS=1, or deactivate it.`
+      );
+    }
+
+    return await this.eventTypeWebhooksService.upsertEventTypeWebhook(body.eventTypeId, body);
   }
 
   // ── Conferencing ──────────────────────────────────────────────────────────
