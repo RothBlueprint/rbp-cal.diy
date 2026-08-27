@@ -2,6 +2,10 @@
  * rbp provisioning: creates the round-robin pool teams, their event types, and the
  * eventTypeId-scoped webhooks that notify the rbp application of bookings.
  *
+ * Also sweeps every AGENT's personal event type and gives it the same webhook. Those
+ * are created one at a time by rbp through POST /v2/users/{userId}/webhooks; this
+ * sweep is the repair pass, for event types that predate that route or drifted.
+ *
  * Idempotent: safe to re-run; existing teams/event types/webhooks are kept and updated.
  *
  * Webhooks must be eventTypeId-scoped in this fork: the booking flow passes teamId=null
@@ -116,6 +120,107 @@ async function ensurePool(index: number) {
   return { slug, teamId: team.id, eventTypeId: eventType.id };
 }
 
+/**
+ * Give every personal `intro` event type an eventTypeId-scoped webhook.
+ *
+ * Personal event types are provisioned per agent by rbp, so this exists to repair
+ * drift and to cover the agents created before POST /v2/users/{userId}/webhooks
+ * existed at all — without it, a booking on an agent's own page notified nobody and
+ * was only recovered by an hourly polling sweep, with reschedules and cancellations
+ * lost entirely.
+ *
+ * `parentId: null` skips managed event type children: getWebhooks.ts already matches
+ * those through their managed parent, so a row here would be a second subscriber.
+ */
+async function ensurePersonalWebhooks(webhookUrl: string, webhookSecret: string) {
+  const eventTypes = await prisma.eventType.findMany({
+    where: { slug: EVENT_SLUG, teamId: null, parentId: null, userId: { not: null } },
+    select: { id: true, userId: true },
+    orderBy: { id: "asc" },
+  });
+
+  console.log(`\npersonal ${EVENT_SLUG} event types (${eventTypes.length}):`);
+
+  for (const eventType of eventTypes) {
+    // Narrowing only; the query already excluded nulls.
+    const userId = eventType.userId as number;
+
+    const existing = await prisma.webhook.findFirst({
+      where: { eventTypeId: eventType.id, subscriberUrl: webhookUrl },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.webhook.update({
+        where: { id: existing.id },
+        data: { eventTriggers: WEBHOOK_TRIGGERS, secret: webhookSecret, active: true },
+      });
+      console.log(`  eventType ${eventType.id} (user ${userId}): webhook ${existing.id} refreshed`);
+      await warnOnUserScopedWebhooks(userId, webhookUrl);
+      continue;
+    }
+
+    // Re-point a legacy user-scoped row instead of adding a second one. getWebhooks.ts
+    // matches subscribers with a flat OR, so leaving it in place next to a new
+    // event-type-scoped row would deliver this booking twice — and while it stands it
+    // also fires on every pool booking the user hosts, which is the same double
+    // delivery from the other direction.
+    const userScoped = await prisma.webhook.findFirst({
+      where: { userId, eventTypeId: null, teamId: null, subscriberUrl: webhookUrl },
+      select: { id: true },
+    });
+
+    if (userScoped) {
+      await prisma.webhook.update({
+        where: { id: userScoped.id },
+        data: {
+          eventTypeId: eventType.id,
+          userId: null,
+          eventTriggers: WEBHOOK_TRIGGERS,
+          secret: webhookSecret,
+          active: true,
+        },
+      });
+      console.log(
+        `  eventType ${eventType.id} (user ${userId}): converted user-scoped webhook ${userScoped.id} to event-type scope`
+      );
+      await warnOnUserScopedWebhooks(userId, webhookUrl);
+      continue;
+    }
+
+    const created = await prisma.webhook.create({
+      data: {
+        id: randomUUID(),
+        eventTypeId: eventType.id,
+        subscriberUrl: webhookUrl,
+        eventTriggers: WEBHOOK_TRIGGERS,
+        secret: webhookSecret,
+        active: true,
+      },
+      select: { id: true },
+    });
+    console.log(`  eventType ${eventType.id} (user ${userId}): created webhook ${created.id}`);
+  }
+}
+
+/**
+ * A user-scoped row surviving next to an event-type-scoped one double-delivers. Report
+ * rather than delete: this only happens when someone made a webhook by hand, and the
+ * script has no way to tell which of the two they meant to keep.
+ */
+async function warnOnUserScopedWebhooks(userId: number, webhookUrl: string) {
+  const leftovers = await prisma.webhook.findMany({
+    where: { userId, eventTypeId: null, teamId: null, subscriberUrl: webhookUrl },
+    select: { id: true },
+  });
+
+  for (const leftover of leftovers) {
+    console.warn(
+      `    WARNING: user-scoped webhook ${leftover.id} (user ${userId}) also targets ${webhookUrl}. It double-delivers alongside the event-type-scoped one and fires on pool bookings too - delete it by hand.`
+    );
+  }
+}
+
 async function ensureSignupDisabled() {
   // NEXT_PUBLIC_DISABLE_SIGNUP cannot do this: Next.js inlines NEXT_PUBLIC_*
   // during `next build`, so setting it at runtime (e.g. in an ECS task
@@ -141,6 +246,13 @@ async function main() {
   const pools = [];
   for (let i = 1; i <= POOL_COUNT; i++) {
     pools.push(await ensurePool(i));
+  }
+
+  if (WEBHOOK_URL) {
+    if (!WEBHOOK_SECRET) throw new Error("RBP_WEBHOOK_SECRET is required when RBP_WEBHOOK_URL is set");
+    await ensurePersonalWebhooks(WEBHOOK_URL, WEBHOOK_SECRET);
+  } else {
+    console.log("\npersonal event type webhooks: RBP_WEBHOOK_URL not set - skipping");
   }
 
   console.log("\nrbp config summary:");

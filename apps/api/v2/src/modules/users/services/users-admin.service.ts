@@ -10,6 +10,7 @@ import { CreationSource } from "@calcom/prisma/client";
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -21,6 +22,8 @@ import { MembershipsRepository } from "@/modules/memberships/memberships.reposit
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
 import { ProvisionUserInput } from "@/modules/users/inputs/provision-user.input";
 import { UsersRepository } from "@/modules/users/users.repository";
+import { UpsertUserWebhookInputDto } from "@/modules/webhooks/inputs/admin-user-webhook.input";
+import { EventTypeWebhooksService } from "@/modules/webhooks/services/event-type-webhooks.service";
 import { BookingsService_2024_08_13 } from "@/platform/bookings/2024-08-13/services/bookings.service";
 import { CalendarsService } from "@/platform/calendars/services/calendars.service";
 import { GoogleCalendarService } from "@/platform/calendars/services/gcal.service";
@@ -47,6 +50,7 @@ export class UsersAdminService {
     private readonly conferencingService: ConferencingService,
     private readonly eventTypesService: EventTypesService_2024_06_14,
     private readonly inputEventTypesService: InputEventTypesService_2024_06_14,
+    private readonly eventTypeWebhooksService: EventTypeWebhooksService,
     private readonly calendarsService: CalendarsService,
     private readonly googleCalendarService: GoogleCalendarService,
     private readonly outlookService: OutlookService,
@@ -262,6 +266,54 @@ export class UsersAdminService {
     );
 
     return await this.eventTypesService.createUserEventType(user, transformed);
+  }
+
+  // ── Webhooks (admin-on-behalf-of) ─────────────────────────────────────────
+  //
+  // The public POST /v2/webhooks creates for whoever the bearer token IS, so an
+  // admin key can only ever mint the admin's own webhooks — which is why nothing
+  // was notifying rbp about bookings on an agent's personal event type. This route
+  // takes the owner as a path param instead and writes an EVENT-TYPE-scoped row.
+  //
+  // Event-type scope is not a preference, it is the only shape that works here:
+  // getWebhooks.ts matches subscribers with a flat OR, so a user-scoped row would
+  // also match every round-robin booking that user hosts and deliver those twice,
+  // and a team-scoped row never fires at all (UPSTREAM-BUGS.md #1).
+
+  /**
+   * Create-or-refresh an event-type-scoped webhook on a user's personal event type.
+   *
+   * Idempotent on (eventTypeId, subscriberUrl): rbp calls this on every agent
+   * activation, re-runs included, and must not accumulate duplicate subscribers.
+   */
+  async upsertUserWebhook(userId: number, body: UpsertUserWebhookInputDto) {
+    await this.requireUser(userId);
+
+    // Read through the write client: the ownership check and the row it authorises
+    // have to see the same database. The event type is frequently created seconds
+    // earlier in the same provisioning run, and replica lag here would 404 it.
+    const eventType = await this.dbWrite.prisma.eventType.findUnique({
+      where: { id: body.eventTypeId },
+      select: { id: true, userId: true, teamId: true },
+    });
+
+    if (!eventType) {
+      throw new NotFoundException(`Event type with id ${body.eventTypeId} not found`);
+    }
+
+    if (eventType.teamId !== null) {
+      throw new BadRequestException(
+        `Event type ${body.eventTypeId} belongs to team ${eventType.teamId}, not to a user. Team event type webhooks are provisioned by scripts/rbp-setup.ts.`
+      );
+    }
+
+    if (eventType.userId !== userId) {
+      throw new ForbiddenException(
+        `Event type ${body.eventTypeId} is not owned by user ${userId}, so a webhook for it cannot be created here.`
+      );
+    }
+
+    return await this.eventTypeWebhooksService.upsertEventTypeWebhook(body.eventTypeId, body);
   }
 
   // ── Conferencing ──────────────────────────────────────────────────────────

@@ -13,7 +13,10 @@ type WebhookInputData = Pick<
 
 @Injectable()
 export class WebhooksRepository {
-  constructor(private readonly dbRead: PrismaReadService, private readonly dbWrite: PrismaWriteService) {}
+  constructor(
+    private readonly dbRead: PrismaReadService,
+    private readonly dbWrite: PrismaWriteService
+  ) {}
 
   async createUserWebhook(userId: number, data: WebhookInputData) {
     const id = uuidv4();
@@ -26,6 +29,36 @@ export class WebhooksRepository {
     const id = uuidv4();
     return this.dbWrite.prisma.webhook.create({
       data: { ...data, id, eventTypeId },
+    });
+  }
+
+  /**
+   * Create-or-refresh keyed on (eventTypeId, subscriberUrl).
+   *
+   * There is no unique constraint on that pair — only ([userId, subscriberUrl]) and
+   * ([platformOAuthClientId, subscriberUrl]) exist, and both are NULL on an
+   * event-type-scoped row — so this cannot be a Prisma `upsert`. The lookup runs on
+   * the WRITE client on purpose: read-replica lag between the find and the create is
+   * exactly what would produce the duplicate row this method exists to prevent.
+   *
+   * `undefined` fields are left alone by Prisma on the update path, which is what
+   * lets a caller omit `secret` without clearing the one already stored.
+   */
+  async upsertEventTypeWebhook(
+    eventTypeId: number,
+    data: Partial<WebhookInputData> & Pick<WebhookInputData, "subscriberUrl">
+  ) {
+    const existing = await this.dbWrite.prisma.webhook.findFirst({
+      where: { eventTypeId, subscriberUrl: data.subscriberUrl },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return this.dbWrite.prisma.webhook.update({ where: { id: existing.id }, data });
+    }
+
+    return this.dbWrite.prisma.webhook.create({
+      data: { ...data, id: uuidv4(), eventTypeId },
     });
   }
 

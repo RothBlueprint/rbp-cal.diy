@@ -1,14 +1,16 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Expose, Type } from "class-transformer";
-import { IsBoolean, IsEnum, IsInt, IsString, ValidateNested, IsArray } from "class-validator";
+import { IsBoolean, IsEnum, IsString, ValidateNested, IsArray } from "class-validator";
 
 import { SUCCESS_STATUS, ERROR_STATUS } from "@calcom/platform-constants";
 import { WebhookTriggerEvents } from "@calcom/platform-libraries";
 
 export class WebhookOutputDto {
-  @IsInt()
+  // Webhook.id is a String column (we store a UUID), not an autoincrement int —
+  // the previous @IsInt()/number here only ever mistyped the generated docs.
+  @IsString()
   @Expose()
-  readonly id!: number;
+  readonly id!: string;
 
   @IsString()
   @Expose()

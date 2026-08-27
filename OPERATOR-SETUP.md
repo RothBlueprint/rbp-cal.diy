@@ -71,7 +71,10 @@ behind the shared ALB, a dedicated Neon database and an ElastiCache Serverless V
 11. 🔴 After the first successful deploy, **provision the pools**: run
     `yarn workspace @calcom/prisma rbp-setup` against the prod DB with
     `RBP_POOL_COUNT`, `RBP_WEBHOOK_URL` (rbp's receiver), `RBP_WEBHOOK_SECRET` set. This
-    creates the team(s), round-robin event type(s), and booking webhooks.
+    creates the team(s), round-robin event type(s), and booking webhooks. It also sweeps
+    every agent's personal `intro` event type and gives it the same event-type-scoped
+    webhook, so re-running it repairs drift. Steady state, per-agent webhooks are created
+    by rbp at activation through `POST /v2/users/{userId}/webhooks`.
 12. 🔴 **Mint the production admin API key** for rbp: log into
     `calendar.rothblueprint.com` as an admin user and create an API key in settings (the
     v2 `/api-keys/refresh` endpoint is stubbed in this fork), or insert one directly. Store

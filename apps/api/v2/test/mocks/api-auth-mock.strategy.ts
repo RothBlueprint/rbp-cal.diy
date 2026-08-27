@@ -25,7 +25,10 @@ export class ApiAuthMockStrategy extends PassportStrategy(BaseStrategy, "api-aut
       const organizationId = this.usersService.getUserMainOrgId(user) as number;
       request.organizationId = organizationId;
 
-      return this.success(user);
+      // Mirrors ApiAuthStrategy.getSuccessUser. Without it request.user.isSystemAdmin
+      // is undefined and IsSystemAdminGuard rejects every admin route under test,
+      // however the fixture set the user's role.
+      return this.success({ ...user, isSystemAdmin: user.role === "ADMIN" });
     } catch (error) {
       console.error(error);
       if (error instanceof Error) return this.error(error);
