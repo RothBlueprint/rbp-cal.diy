@@ -19,6 +19,11 @@
  *   RBP_EVENT_LENGTH      minutes (default 30)
  *   RBP_WEBHOOK_URL       rbp receiver endpoint; webhooks skipped when unset
  *   RBP_WEBHOOK_SECRET    HMAC secret for X-Cal-Signature-256 (required with URL)
+ *   RBP_ADOPT_USER_SCOPED_WEBHOOKS
+ *                         "1" to convert a legacy user-scoped webhook aimed at
+ *                         RBP_WEBHOOK_URL into an event-type-scoped one. Off by
+ *                         default because it is destructive; without it such an
+ *                         event type is skipped with an explanation.
  *
  * Run: yarn workspace @calcom/prisma rbp-setup
  */
@@ -40,6 +45,11 @@ const EVENT_TITLE = process.env.RBP_EVENT_TITLE ?? "Intro Call";
 const EVENT_LENGTH = Number(process.env.RBP_EVENT_LENGTH ?? 30);
 const WEBHOOK_URL = process.env.RBP_WEBHOOK_URL;
 const WEBHOOK_SECRET = process.env.RBP_WEBHOOK_SECRET;
+
+// Converting a user-scoped webhook to event-type scope is the one destructive step in
+// this script, so it is opt-in rather than automatic. See ensurePersonalWebhooks.
+const ADOPT_ENV_VAR = "RBP_ADOPT_USER_SCOPED_WEBHOOKS";
+const ADOPT_USER_SCOPED = process.env[ADOPT_ENV_VAR] === "1";
 
 const WEBHOOK_TRIGGERS: WebhookTriggerEvents[] = [
   WebhookTriggerEvents.BOOKING_CREATED,
@@ -160,17 +170,33 @@ async function ensurePersonalWebhooks(webhookUrl: string, webhookSecret: string)
       continue;
     }
 
-    // Re-point a legacy user-scoped row instead of adding a second one. getWebhooks.ts
-    // matches subscribers with a flat OR, so leaving it in place next to a new
-    // event-type-scoped row would deliver this booking twice — and while it stands it
-    // also fires on every pool booking the user hosts, which is the same double
-    // delivery from the other direction.
+    // A user-scoped row aimed at this same receiver has to be dealt with before we can
+    // add an event-type-scoped one: getWebhooks.ts matches subscribers with a flat OR,
+    // so the two together would deliver this booking twice — and while the user-scoped
+    // row stands alone it fires on every pool booking the user hosts, which is the
+    // same double delivery from the other direction.
+    //
+    // Re-pointing it is destructive and not fully inferable: if someone meant that row
+    // to cover ALL of the user's event types, narrowing it to this one silently stops
+    // delivery for the others. So it is opt-in. Without the flag we neither convert nor
+    // add a second row — that leaves the pre-existing behaviour exactly as it was, and
+    // says what to run.
     const userScoped = await prisma.webhook.findFirst({
       where: { userId, eventTypeId: null, teamId: null, subscriberUrl: webhookUrl },
-      select: { id: true },
+      select: { id: true, eventTriggers: true },
     });
 
     if (userScoped) {
+      if (!ADOPT_USER_SCOPED) {
+        console.warn(
+          `  eventType ${eventType.id} (user ${userId}): SKIPPED - user-scoped webhook ${userScoped.id} already targets ${webhookUrl}.`
+        );
+        console.warn(
+          `    Adding an event-type-scoped webhook beside it would double-deliver. Re-run with ${ADOPT_ENV_VAR}=1 to convert it to event-type scope: it keeps its id, its secret and triggers are reset to RBP_WEBHOOK_SECRET/RBP_WEBHOOK_TRIGGERS, and it stops firing on this user's pool bookings.`
+        );
+        continue;
+      }
+
       await prisma.webhook.update({
         where: { id: userScoped.id },
         data: {
@@ -181,8 +207,10 @@ async function ensurePersonalWebhooks(webhookUrl: string, webhookSecret: string)
           active: true,
         },
       });
+      // Log the prior state: this is the one irreversible step in the sweep, and the
+      // old userId/triggers are what an operator needs to undo it.
       console.log(
-        `  eventType ${eventType.id} (user ${userId}): converted user-scoped webhook ${userScoped.id} to event-type scope`
+        `  eventType ${eventType.id} (user ${userId}): converted user-scoped webhook ${userScoped.id} to event-type scope (was userId=${userId}, triggers=${userScoped.eventTriggers.join(",")})`
       );
       await warnOnUserScopedWebhooks(userId, webhookUrl);
       continue;

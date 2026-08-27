@@ -46,6 +46,7 @@ describe("UsersAdminController webhooks (e2e)", () => {
   let otherAgent: UserWithProfile;
 
   let agentEventType: EventType;
+  let concurrencyEventType: EventType;
   let otherAgentEventType: EventType;
   let team: Team;
   let teamEventType: EventType;
@@ -86,6 +87,11 @@ describe("UsersAdminController webhooks (e2e)", () => {
     otherAgentEventType = await eventTypesRepositoryFixture.create(
       { title: "Intro Call", slug: `intro-${randomString(6)}`, length: 30 },
       otherAgent.id
+    );
+    // Kept clean for the concurrency test, which needs a pair with no row yet.
+    concurrencyEventType = await eventTypesRepositoryFixture.create(
+      { title: "Intro Call", slug: `intro-${randomString(6)}`, length: 30 },
+      agent.id
     );
 
     team = await teamRepositoryFixture.create({
@@ -169,6 +175,31 @@ describe("UsersAdminController webhooks (e2e)", () => {
     // secret was omitted from the body, so the working one must survive — clearing it
     // would silently break signature verification on the receiver.
     expect(all[0].secret).toEqual("a-shared-secret");
+  });
+
+  it("creates exactly one webhook under concurrent first-time calls", async () => {
+    // The find-then-create this replaced had a TOCTOU window: overlapping calls — a
+    // double activation, or a retry after a request timed out at the ALB but still
+    // landed — both saw no row and both inserted, and the event type then delivered
+    // every booking twice. Guarded by @@unique([eventTypeId, subscriberUrl]).
+    const body = {
+      eventTypeId: concurrencyEventType.id,
+      subscriberUrl: SUBSCRIBER_URL,
+      eventTriggers: TRIGGERS,
+      secret: "a-shared-secret",
+    };
+
+    const responses = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        request(app.getHttpServer()).post(`/v2/users/${agent.id}/webhooks`).send(body)
+      )
+    );
+
+    expect(responses.map((r) => r.status)).toEqual([200, 200, 200, 200]);
+
+    const all = await webhookRepositoryFixture.getAllByEventTypeId(concurrencyEventType.id);
+    expect(all).toHaveLength(1);
+    expect(new Set(responses.map((r) => r.body.data.id))).toEqual(new Set([all[0].id]));
   });
 
   it("reactivates a webhook that had been disabled", async () => {
