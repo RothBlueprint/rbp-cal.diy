@@ -215,23 +215,26 @@ async function ensurePersonalWebhooks(webhookUrl: string, webhookSecret: string)
         continue;
       }
 
-      await prisma.webhook.update({
-        where: { id: userScoped.id },
-        data: {
-          eventTypeId: eventType.id,
-          userId: null,
-          eventTriggers: WEBHOOK_TRIGGERS,
-          secret: webhookSecret,
-          active: true,
-        },
-      });
-      // Log the prior state: this is the one irreversible step in the sweep, and the
-      // old userId/triggers are what an operator needs to undo it.
-      console.log(
-        `  eventType ${eventType.id} (user ${userId}): converted user-scoped webhook ${userScoped.id} to event-type scope (was userId=${userId}, triggers=${userScoped.eventTriggers.join(",")})`
+      // The conversion writes eventTypeId onto an existing row, so it collides with the
+      // unique index if another writer — a concurrent sweep, or an rbp activation while
+      // the operator runs this — created that row since the lookup above. Let it fall
+      // through rather than abort: an uncaught constraint error would exit main() and
+      // strand every later event type, and leave this user's legacy row unreconciled.
+      const converted = await adoptUserScopedWebhook(userScoped.id, eventType.id, webhookSecret);
+
+      if (converted) {
+        // Log the prior state: this is the one destructive step in the sweep, and the
+        // old userId/triggers are what an operator needs to undo it.
+        console.log(
+          `  eventType ${eventType.id} (user ${userId}): converted user-scoped webhook ${userScoped.id} to event-type scope (was userId=${userId}, triggers=${userScoped.eventTriggers.join(",")})`
+        );
+        await reconcileUserScopedWebhooks(userId, webhookUrl);
+        continue;
+      }
+
+      console.warn(
+        `  eventType ${eventType.id} (user ${userId}): an event-type-scoped webhook appeared concurrently, so ${userScoped.id} was left as-is and is deactivated below instead of converted`
       );
-      await reconcileUserScopedWebhooks(userId, webhookUrl);
-      continue;
     }
 
     // upsert, not create: a concurrent sweep or an API activation can win the
@@ -253,6 +256,35 @@ async function ensurePersonalWebhooks(webhookUrl: string, webhookSecret: string)
       select: { id: true },
     });
     console.log(`  eventType ${eventType.id} (user ${userId}): created webhook ${created.id}`);
+    // No-op unless we fell through from a lost adoption race; otherwise `userScoped` was
+    // null and there is nothing colliding to reconcile.
+    await reconcileUserScopedWebhooks(userId, webhookUrl);
+  }
+}
+
+/**
+ * Re-point a user-scoped row at one event type, keeping its id.
+ *
+ * Returns false — rather than throwing — when the (eventTypeId, subscriberUrl) row it
+ * would become already exists, which means another writer got there first. The caller
+ * then takes the ordinary path and deactivates this row instead.
+ */
+async function adoptUserScopedWebhook(webhookId: string, eventTypeId: number, webhookSecret: string) {
+  try {
+    await prisma.webhook.update({
+      where: { id: webhookId },
+      data: {
+        eventTypeId,
+        userId: null,
+        eventTriggers: WEBHOOK_TRIGGERS,
+        secret: webhookSecret,
+        active: true,
+      },
+    });
+    return true;
+  } catch (error) {
+    if ((error as { code?: string }).code === "P2002") return false;
+    throw error;
   }
 }
 

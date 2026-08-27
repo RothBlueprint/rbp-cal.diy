@@ -287,11 +287,20 @@ export class UsersAdminService {
    * activation, re-runs included, and must not accumulate duplicate subscribers.
    */
   async upsertUserWebhook(userId: number, body: UpsertUserWebhookInputDto) {
-    await this.requireUser(userId);
+    // Both reads go through the write client, unlike requireUser() which resolves via
+    // PrismaReadService. This runs moments after the user and the event type were
+    // provisioned in the same activation, so a replica that has not caught up would
+    // 404 a request that is perfectly valid — and the ownership check and the row it
+    // authorises have to be looking at the same database in any case.
+    const user = await this.dbWrite.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
 
-    // Read through the write client: the ownership check and the row it authorises
-    // have to see the same database. The event type is frequently created seconds
-    // earlier in the same provisioning run, and replica lag here would 404 it.
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+
     const eventType = await this.dbWrite.prisma.eventType.findUnique({
       where: { id: body.eventTypeId },
       select: { id: true, userId: true, teamId: true, parentId: true },
