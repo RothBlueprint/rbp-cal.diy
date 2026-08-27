@@ -35,6 +35,7 @@ describe("UsersAdminController webhooks (e2e)", () => {
   const adminEmail = `users-admin-webhooks-admin-${randomString()}@api.com`;
   const agentEmail = `users-admin-webhooks-agent-${randomString()}@api.com`;
   const otherAgentEmail = `users-admin-webhooks-other-${randomString()}@api.com`;
+  const conflictAgentEmail = `users-admin-webhooks-conflict-${randomString()}@api.com`;
 
   let userRepositoryFixture: UserRepositoryFixture;
   let eventTypesRepositoryFixture: EventTypesRepositoryFixture;
@@ -48,6 +49,8 @@ describe("UsersAdminController webhooks (e2e)", () => {
   let agentEventType: EventType;
   let concurrencyEventType: EventType;
   let managedChildEventType: EventType;
+  let conflictAgent: UserWithProfile;
+  let conflictEventType: EventType;
   let otherAgentEventType: EventType;
   let team: Team;
   let teamEventType: EventType;
@@ -95,6 +98,17 @@ describe("UsersAdminController webhooks (e2e)", () => {
       agent.id
     );
 
+    // Isolated pair for the user-scoped conflict test, so the legacy row it creates
+    // cannot affect the other cases.
+    conflictAgent = await userRepositoryFixture.create({
+      email: conflictAgentEmail,
+      username: conflictAgentEmail,
+    });
+    conflictEventType = await eventTypesRepositoryFixture.create(
+      { title: "Intro Call", slug: `intro-${randomString(6)}`, length: 30 },
+      conflictAgent.id
+    );
+
     // A managed child looks personal — the member's userId, a null teamId — but the
     // subscriber lookup resolves its parentId and matches the parent's webhooks too.
     managedChildEventType = await eventTypesRepositoryFixture.create(
@@ -130,6 +144,7 @@ describe("UsersAdminController webhooks (e2e)", () => {
     await userRepositoryFixture.deleteByEmail(admin.email);
     await userRepositoryFixture.deleteByEmail(agent.email);
     await userRepositoryFixture.deleteByEmail(otherAgent.email);
+    await userRepositoryFixture.deleteByEmail(conflictAgent.email);
     await app.close();
   }, HOOK_TIMEOUT_MS);
 
@@ -261,6 +276,43 @@ describe("UsersAdminController webhooks (e2e)", () => {
 
     const all = await webhookRepositoryFixture.getAllByEventTypeId(managedChildEventType.id);
     expect(all).toHaveLength(0);
+  });
+
+  it("refuses to add a second subscriber beside an active user-scoped webhook", async () => {
+    // getSubscribersRaw UNIONs the user and event-type branches, so the two rows would
+    // both match a booking here and rbp would be notified twice.
+    const legacy = await webhookRepositoryFixture.create({
+      id: `legacy-${randomString(8)}`,
+      subscriberUrl: SUBSCRIBER_URL,
+      eventTriggers: ["BOOKING_CREATED"],
+      active: true,
+      user: { connect: { id: conflictAgent.id } },
+    });
+
+    await request(app.getHttpServer())
+      .post(`/v2/users/${conflictAgent.id}/webhooks`)
+      .send({
+        eventTypeId: conflictEventType.id,
+        subscriberUrl: SUBSCRIBER_URL,
+        eventTriggers: TRIGGERS,
+      })
+      .expect(409);
+
+    expect(await webhookRepositoryFixture.getAllByEventTypeId(conflictEventType.id)).toHaveLength(0);
+
+    // Deactivated it can no longer deliver, so it is no longer a conflict.
+    await webhookRepositoryFixture.deactivate(legacy.id);
+
+    await request(app.getHttpServer())
+      .post(`/v2/users/${conflictAgent.id}/webhooks`)
+      .send({
+        eventTypeId: conflictEventType.id,
+        subscriberUrl: SUBSCRIBER_URL,
+        eventTriggers: TRIGGERS,
+      })
+      .expect(200);
+
+    expect(await webhookRepositoryFixture.getAllByEventTypeId(conflictEventType.id)).toHaveLength(1);
   });
 
   it("rejects a team event type", async () => {

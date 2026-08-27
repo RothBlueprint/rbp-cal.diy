@@ -323,6 +323,33 @@ export class UsersAdminService {
       );
     }
 
+    // WebhookRepository.getSubscribersRaw is a UNION ALL of independent branches —
+    // platform, user, event type, managed parent, team — each filtered on active = true.
+    // So an ACTIVE user-scoped row aimed at this same receiver matches a booking on this
+    // event type alongside the row we are about to write, and rbp is notified twice.
+    //
+    // Refuse rather than create that state. Re-pointing the legacy row is destructive
+    // and is a deliberate operator step (scripts/rbp-setup.ts with
+    // RBP_ADOPT_USER_SCOPED_WEBHOOKS=1); an activation call must not do it silently.
+    // Inactive rows are ignored — every branch of that lookup requires active = true, so
+    // they deliver nothing.
+    const conflictingUserWebhook = await this.dbWrite.prisma.webhook.findFirst({
+      where: {
+        userId,
+        eventTypeId: null,
+        teamId: null,
+        subscriberUrl: body.subscriberUrl,
+        active: true,
+      },
+      select: { id: true },
+    });
+
+    if (conflictingUserWebhook) {
+      throw new ConflictException(
+        `User ${userId} already has an active user-scoped webhook (${conflictingUserWebhook.id}) for ${body.subscriberUrl}, which would deliver alongside an event-type-scoped one — every booking on event type ${body.eventTypeId} would notify twice. Convert it first by running scripts/rbp-setup.ts with RBP_ADOPT_USER_SCOPED_WEBHOOKS=1, or deactivate it.`
+      );
+    }
+
     return await this.eventTypeWebhooksService.upsertEventTypeWebhook(body.eventTypeId, body);
   }
 
