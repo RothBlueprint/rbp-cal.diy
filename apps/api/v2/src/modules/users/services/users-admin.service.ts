@@ -294,7 +294,7 @@ export class UsersAdminService {
     // earlier in the same provisioning run, and replica lag here would 404 it.
     const eventType = await this.dbWrite.prisma.eventType.findUnique({
       where: { id: body.eventTypeId },
-      select: { id: true, userId: true, teamId: true },
+      select: { id: true, userId: true, teamId: true, parentId: true },
     });
 
     if (!eventType) {
@@ -304,6 +304,16 @@ export class UsersAdminService {
     if (eventType.teamId !== null) {
       throw new BadRequestException(
         `Event type ${body.eventTypeId} belongs to team ${eventType.teamId}, not to a user. Team event type webhooks are provisioned by scripts/rbp-setup.ts.`
+      );
+    }
+
+    // A managed event type child looks personal — it carries the member's userId and a
+    // null teamId — but subscribing to it duplicates delivery: getWebhooks.ts resolves
+    // the booked child's parentId and matches webhooks on BOTH the child and its
+    // managed parent. scripts/rbp-setup.ts skips these for the same reason.
+    if (eventType.parentId !== null) {
+      throw new BadRequestException(
+        `Event type ${body.eventTypeId} is a managed event type child of ${eventType.parentId}. Subscribe on the parent instead: the subscriber lookup matches a child booking against both, so a webhook here would deliver twice.`
       );
     }
 

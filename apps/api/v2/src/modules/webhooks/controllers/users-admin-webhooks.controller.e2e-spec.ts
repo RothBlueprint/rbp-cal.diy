@@ -47,6 +47,7 @@ describe("UsersAdminController webhooks (e2e)", () => {
 
   let agentEventType: EventType;
   let concurrencyEventType: EventType;
+  let managedChildEventType: EventType;
   let otherAgentEventType: EventType;
   let team: Team;
   let teamEventType: EventType;
@@ -94,6 +95,18 @@ describe("UsersAdminController webhooks (e2e)", () => {
       agent.id
     );
 
+    // A managed child looks personal — the member's userId, a null teamId — but the
+    // subscriber lookup resolves its parentId and matches the parent's webhooks too.
+    managedChildEventType = await eventTypesRepositoryFixture.create(
+      {
+        title: "Managed Intro",
+        slug: `managed-intro-${randomString(6)}`,
+        length: 30,
+        parent: { connect: { id: agentEventType.id } },
+      },
+      agent.id
+    );
+
     team = await teamRepositoryFixture.create({
       name: `users-admin-webhooks-team-${randomString(6)}`,
     });
@@ -110,6 +123,7 @@ describe("UsersAdminController webhooks (e2e)", () => {
   }, HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
+    await eventTypesRepositoryFixture.delete(managedChildEventType.id);
     await eventTypesRepositoryFixture.delete(teamEventType.id);
     await teamRepositoryFixture.delete(team.id);
     // Users cascade to their event types, which cascade to the webhooks under test.
@@ -232,6 +246,20 @@ describe("UsersAdminController webhooks (e2e)", () => {
       .expect(403);
 
     const all = await webhookRepositoryFixture.getAllByEventTypeId(otherAgentEventType.id);
+    expect(all).toHaveLength(0);
+  });
+
+  it("rejects a managed event type child", async () => {
+    await request(app.getHttpServer())
+      .post(`/v2/users/${agent.id}/webhooks`)
+      .send({
+        eventTypeId: managedChildEventType.id,
+        subscriberUrl: SUBSCRIBER_URL,
+        eventTriggers: TRIGGERS,
+      })
+      .expect(400);
+
+    const all = await webhookRepositoryFixture.getAllByEventTypeId(managedChildEventType.id);
     expect(all).toHaveLength(0);
   });
 

@@ -181,8 +181,14 @@ async function ensurePersonalWebhooks(webhookUrl: string, webhookSecret: string)
     // delivery for the others. So it is opt-in. Without the flag we neither convert nor
     // add a second row — that leaves the pre-existing behaviour exactly as it was, and
     // says what to run.
+    // `active: true` matters here and ONLY here. An inactive row cannot deliver, so it
+    // is not a conflict: it must not block creation, and adopting it would revive
+    // something someone deliberately switched off. The `existing` lookup above must
+    // stay unfiltered by contrast — an inactive event-type-scoped row is the row we
+    // need to refresh, and skipping it would fall through to a create that the
+    // (eventTypeId, subscriberUrl) unique constraint rejects outright.
     const userScoped = await prisma.webhook.findFirst({
-      where: { userId, eventTypeId: null, teamId: null, subscriberUrl: webhookUrl },
+      where: { userId, eventTypeId: null, teamId: null, subscriberUrl: webhookUrl, active: true },
       select: { id: true, eventTriggers: true },
     });
 
@@ -232,13 +238,14 @@ async function ensurePersonalWebhooks(webhookUrl: string, webhookSecret: string)
 }
 
 /**
- * A user-scoped row surviving next to an event-type-scoped one double-delivers. Report
- * rather than delete: this only happens when someone made a webhook by hand, and the
- * script has no way to tell which of the two they meant to keep.
+ * An ACTIVE user-scoped row surviving next to an event-type-scoped one double-delivers.
+ * Report rather than delete: this only happens when someone made a webhook by hand, and
+ * the script has no way to tell which of the two they meant to keep. Inactive rows are
+ * ignored — subscriber selection requires active = true, so they deliver nothing.
  */
 async function warnOnUserScopedWebhooks(userId: number, webhookUrl: string) {
   const leftovers = await prisma.webhook.findMany({
-    where: { userId, eventTypeId: null, teamId: null, subscriberUrl: webhookUrl },
+    where: { userId, eventTypeId: null, teamId: null, subscriberUrl: webhookUrl, active: true },
     select: { id: true },
   });
 
