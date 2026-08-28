@@ -4,6 +4,7 @@ import {
   CALENDARS,
   CREDENTIAL_CALENDARS,
   GOOGLE_CALENDAR,
+  GOOGLE_CALENDAR_TYPE,
   OFFICE_365_CALENDAR,
   SUCCESS_STATUS,
 } from "@calcom/platform-constants";
@@ -345,7 +346,15 @@ export class CalendarsController {
     @GetUser() user: UserWithProfile
   ): Promise<DeletedCalendarCredentialsOutputResponseDto> {
     const { id: credentialId } = body;
-    await this.calendarsService.checkCalendarCredentials(credentialId, user.id);
+    const credential = await this.calendarsService.checkCalendarCredentials(credentialId, user.id);
+
+    // rbp: revoke the OAuth grant at Google *before* deleting the row. The refresh token
+    // lives on the row, so deleting first and failing to revoke would leave a live grant in
+    // the user's Google account that nothing could ever revoke. Google Calendar only —
+    // Outlook has the same gap, tracked separately.
+    if (credential.type === GOOGLE_CALENDAR_TYPE) {
+      await this.googleCalendarService.revokeGrant(credential.key);
+    }
 
     const { id, type, userId, teamId, appId, invalid } =
       await this.calendarsRepository.deleteCredentials(credentialId);

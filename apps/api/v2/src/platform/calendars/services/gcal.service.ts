@@ -1,4 +1,5 @@
 import { GOOGLE_CALENDAR_TYPE, SUCCESS_STATUS } from "@calcom/platform-constants";
+import { OAuth2UniversalSchema } from "@calcom/platform-libraries/app-store";
 import { Prisma } from "@calcom/prisma/client";
 import { calendar_v3 } from "@googleapis/calendar";
 import {
@@ -6,6 +7,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -24,6 +26,36 @@ const CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/calendar.events",
 ];
+
+// rbp: shape of a failed Google API call, narrowed structurally so we do not depend on
+// gaxios' own error types. A transport error or a timeout carries no `response` at all,
+// which is precisely the signal that we never reached Google.
+const googleApiErrorSchema = z.object({
+  response: z.object({
+    status: z.number(),
+    data: z.union([z.object({ error: z.string().optional() }).passthrough(), z.string()]).optional(),
+  }),
+});
+
+/**
+ * rbp: Google answers 400 `invalid_token` when the token is already dead — the normal case
+ * when the user revoked at myaccount.google.com/permissions before disconnecting here. The
+ * grant is gone, which is the outcome we wanted, so the caller may delete the credential.
+ *
+ * Anything else (no response, a 5xx, another 4xx) means we do not know whether the grant
+ * survived. Those must not be swallowed: reporting a completed disconnect over a grant that
+ * is still live in the user's Google account is the exact failure this code exists to remove.
+ */
+function isGoogleTokenAlreadyInvalid(error: unknown): boolean {
+  const parsed = googleApiErrorSchema.safeParse(error);
+  if (!parsed.success || parsed.data.response.status !== 400) {
+    return false;
+  }
+  const { data } = parsed.data.response;
+  // The body is usually parsed JSON, but can arrive as a raw string.
+  const code = typeof data === "string" ? data : data?.error ?? "";
+  return code.includes("invalid_token") || code.includes("invalid_grant");
+}
 
 @Injectable()
 export class GoogleCalendarService implements OAuthCalendarApp {
@@ -117,6 +149,45 @@ export class GoogleCalendarService implements OAuthCalendarApp {
 
     const oAuth2Client = new OAuth2Client(client_id, client_secret, redirectUri);
     return oAuth2Client;
+  }
+
+  /**
+   * rbp: Google OAuth verification requires that disconnecting the calendar in our app also
+   * drops the grant at myaccount.google.com/permissions. Nothing else in this fork tells
+   * Google to do that — disconnect only deleted our own credential row.
+   *
+   * Revokes the *refresh* token, which invalidates the whole grant; revoking only the access
+   * token leaves the grant listed in the user's Google account.
+   *
+   * Throws when the revoke genuinely failed, so the caller aborts before deleting the
+   * credential row: the refresh token lives on that row, so deleting first would strand a
+   * live grant with nothing left anywhere able to revoke it.
+   */
+  async revokeGrant(credentialKey: unknown): Promise<void> {
+    const parsedKey = OAuth2UniversalSchema.safeParse(credentialKey);
+    const token = parsedKey.success ? parsedKey.data.refresh_token ?? parsedKey.data.access_token : undefined;
+
+    if (!token) {
+      // No revocable token was ever stored, so there is no grant we could drop. Refusing here
+      // would make the credential impossible to delete, permanently.
+      this.logger.warn("No Google OAuth token stored on credential, nothing to revoke");
+      return;
+    }
+
+    const oAuth2Client = await this.getOAuthClient(this.redirectUri);
+
+    try {
+      await oAuth2Client.revokeToken(token);
+    } catch (error) {
+      if (isGoogleTokenAlreadyInvalid(error)) {
+        this.logger.log("Google OAuth token was already invalid, treating the grant as revoked");
+        return;
+      }
+      this.logger.error("Failed to revoke Google OAuth grant", error);
+      throw new ServiceUnavailableException(
+        "Could not revoke the Google Calendar access grant, so the calendar was left connected. Please try disconnecting again."
+      );
+    }
   }
 
   async checkIfCalendarConnected(userId: number): Promise<{ status: typeof SUCCESS_STATUS }> {
