@@ -7,12 +7,12 @@ declare module "@wojtekmaj/react-daterange-picker/dist/entry.nostyle" {
     calendarClassName?: string;
     onChange: (value: [Date, Date]) => void;
     value: [Date, Date];
-    clearIcon: JSX.Element | null;
-    calendarIcon: JSX.Element | null;
-    rangeDivider: JSX.Element | null;
+    clearIcon: import("react").JSX.Element | null;
+    calendarIcon: import("react").JSX.Element | null;
+    rangeDivider: import("react").JSX.Element | null;
     disabled?: boolean | null;
-    nextLabel?: JSX.Element | null;
-    prevLabel?: JSX.Element | null;
+    nextLabel?: import("react").JSX.Element | null;
+    prevLabel?: import("react").JSX.Element | null;
   };
-  export default function DateRangePicker(props: DateRangePickerCalendarProps): JSX.Element;
+  export default function DateRangePicker(props: DateRangePickerCalendarProps): import("react").JSX.Element;
 }

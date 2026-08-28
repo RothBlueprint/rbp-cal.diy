@@ -1,5 +1,6 @@
 import { useId } from "@radix-ui/react-id";
 import type { ReactElement, ReactNode, Ref } from "react";
+import type { JSX } from "react";
 import React, { forwardRef } from "react";
 import type { FieldValues, SubmitHandler, UseFormReturn } from "react-hook-form";
 import { FormProvider, useFormContext } from "react-hook-form";
@@ -220,17 +221,21 @@ const PlainForm = <T extends FieldValues>(props: FormProps<T>, ref: Ref<HTMLForm
         {
           /* @see https://react-hook-form.com/advanced-usage/#SmartFormComponent */
           React.Children.map(props.children, (child) => {
+            // React 19 types ReactElement.props as `unknown` rather than `any`, so the
+            // narrowing above no longer tells TS what is being spread. The runtime
+            // checks are unchanged; this only names the shape they establish.
+            const element = child as React.ReactElement<{ name?: string }> | null | undefined;
             return typeof child !== "string" &&
               typeof child !== "number" &&
               typeof child !== "boolean" &&
-              child &&
-              "props" in child &&
-              child.props.name
-              ? React.createElement(child.type, {
+              element &&
+              "props" in element &&
+              element.props.name
+              ? React.createElement(element.type, {
                   ...{
-                    ...child.props,
+                    ...element.props,
                     register: form.register,
-                    key: child.props.name,
+                    key: element.props.name,
                   },
                 })
               : child;

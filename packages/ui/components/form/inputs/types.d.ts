@@ -1,4 +1,8 @@
 import type { VariantProps } from "class-variance-authority";
+// @types/react 19 removed the global JSX namespace. This is a .d.ts, so with
+// skipLibCheck the breakage is silent: InputProps degrades instead of erroring,
+// and every onChange handler typed through it loses its parameter type.
+import type { JSX } from "react";
 
 import type { inputStyles } from "./TextField";
 

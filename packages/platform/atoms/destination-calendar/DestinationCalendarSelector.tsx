@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import type { JSX } from "react";
 
 import {
   OptionComponent,

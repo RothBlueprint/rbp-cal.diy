@@ -7,6 +7,7 @@ import { Select } from "@calcom/ui/components/form";
 import { CheckIcon } from "@coss/ui/icons";
 import classNames from "classnames";
 import { useEffect, useState } from "react";
+import type { JSX } from "react";
 import type { OptionProps, SingleValueProps } from "react-select";
 import { components } from "react-select";
 

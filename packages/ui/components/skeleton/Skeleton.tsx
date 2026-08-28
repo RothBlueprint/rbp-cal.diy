@@ -1,4 +1,5 @@
 import React from "react";
+import type { JSX } from "react";
 
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import classNames from "@calcom/ui/classNames";

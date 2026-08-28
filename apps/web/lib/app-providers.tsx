@@ -25,6 +25,7 @@ import type { SSRConfig } from "next-i18next/dist/types/types";
 import { ThemeProvider } from "next-themes";
 import { NuqsAdapter } from "nuqs/adapters/next/pages";
 import type { PropsWithChildren, ReactNode } from "react";
+import type { JSX } from "react";
 import { useEffect } from "react";
 
 const I18nextAdapter = appWithTranslation<

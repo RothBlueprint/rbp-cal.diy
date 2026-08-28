@@ -5,6 +5,7 @@ import { Badge } from "@calcom/ui/components/badge";
 import { Button } from "@calcom/ui/components/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@calcom/ui/components/popover";
 import { useCallback, useMemo, useState } from "react";
+import type { JSX } from "react";
 
 const MAX_VISIBLE_BADGES = 2;
 

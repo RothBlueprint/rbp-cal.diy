@@ -1,6 +1,7 @@
 "use client";
 
 import type { SetStateAction, Dispatch } from "react";
+import type { JSX } from "react";
 import React from "react";
 import {
   useMemo,

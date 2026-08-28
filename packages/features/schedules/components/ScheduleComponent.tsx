@@ -1,4 +1,5 @@
 import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { JSX } from "react";
 import type {
   ArrayPath,
   Control,

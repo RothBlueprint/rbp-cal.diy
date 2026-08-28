@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import type { JSX } from "react";
 
 interface Props {
   children: React.ReactNode; // React.ReactNode

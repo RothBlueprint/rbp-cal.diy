@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { JSX } from "react";
 import { Controller, useFormContext } from "react-hook-form";
 
 import { LearnMoreLink } from "@calcom/features/eventtypes/components/LearnMoreLink";

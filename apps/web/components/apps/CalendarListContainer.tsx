@@ -18,6 +18,7 @@ import SubHeadingTitleWithConnections from "@components/integrations/SubHeadingT
 import useRouterQuery from "@lib/hooks/useRouterQuery";
 import { QueryCell } from "@lib/QueryCell";
 import { Suspense, useEffect } from "react";
+import type { JSX } from "react";
 import { DestinationCalendarSettingsWebWrapper } from "./DestinationCalendarSettingsWebWrapper";
 
 type CalendarListContainerProps = {

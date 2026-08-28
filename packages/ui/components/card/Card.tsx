@@ -3,6 +3,7 @@ import type { VariantProps } from "class-variance-authority";
 import { cva } from "class-variance-authority";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import type { JSX } from "react";
 import React from "react";
 
 import classNames from "@calcom/ui/classNames";

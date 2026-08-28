@@ -9,6 +9,7 @@ import { withAppDirSsr } from "app/WithAppDirSsr";
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import type React from "react";
+import type { JSX } from "react";
 import type { PageProps as LegacyPageProps } from "~/users/views/users-type-public-view";
 import LegacyPage from "~/users/views/users-type-public-view";
 

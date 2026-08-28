@@ -3,6 +3,7 @@
 import { PencilIcon } from "@coss/ui/icons";
 import classNames from "classnames";
 import { useState } from "react";
+import type { JSX } from "react";
 import type { ControllerRenderProps } from "react-hook-form";
 
 export const EditableHeading = function EditableHeading({

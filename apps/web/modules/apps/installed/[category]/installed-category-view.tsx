@@ -20,6 +20,7 @@ import { CalendarListContainer } from "@components/apps/CalendarListContainer";
 import InstalledAppsLayout from "@components/apps/layouts/InstalledAppsLayout";
 import { QueryCell } from "@lib/QueryCell";
 import { useReducer } from "react";
+import type { JSX } from "react";
 import { APP_CATEGORY_ENTRIES, ActiveAppCategoryKeys } from "@calcom/app-store/_utils/getAppCategories";
 
 interface IntegrationsContainerProps {

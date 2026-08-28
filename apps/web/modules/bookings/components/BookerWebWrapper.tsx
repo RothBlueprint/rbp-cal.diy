@@ -20,6 +20,7 @@ import { useEvent, useScheduleForEvent } from "@calcom/web/modules/schedules/hoo
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo } from "react";
+import type { JSX } from "react";
 import { shallow } from "zustand/shallow";
 import { useBookings } from "../hooks/useBookings";
 import { useCalendars } from "../hooks/useCalendars";

@@ -3,7 +3,7 @@
  */
 import { useEffect } from "react";
 import * as React from "react";
-import ReactDom from "react-dom";
+import { createRoot } from "react-dom/client";
 
 import { getCalApi } from "./src/index";
 
@@ -27,4 +27,10 @@ function App() {
   return null;
 }
 
-ReactDom.render(<App />, document.getElementById("root"));
+// React 19 removed ReactDOM.render. createRoot is the replacement, and it
+// requires a non-null container, hence the explicit check.
+const container = document.getElementById("root");
+if (!container) {
+  throw new Error("embed-react demo: #root not found");
+}
+createRoot(container).render(<App />);

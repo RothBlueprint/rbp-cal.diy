@@ -42,7 +42,7 @@ describe("Tests for EventTypeAppCard component", () => {
       expect.objectContaining({
         slug: mockProps.app.slug,
       }),
-      {}
+      undefined
     );
 
     expect(screen.getByText("MockedDynamicComponent")).toBeInTheDocument();
@@ -78,7 +78,7 @@ describe("Tests for EventTypeAppCard component", () => {
       expect.objectContaining({
         slug: "stripepayment",
       }),
-      {}
+      undefined
     );
 
     expect(screen.getByText("MockedDynamicComponent")).toBeInTheDocument();

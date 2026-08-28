@@ -53,6 +53,7 @@ import { TRPCClientError } from "@trpc/client";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type React from "react";
+import type { JSX } from "react";
 import type { FC } from "react";
 import { createContext, memo, useContext, useEffect, useState } from "react";
 import { z } from "zod";

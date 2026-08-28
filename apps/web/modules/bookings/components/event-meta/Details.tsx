@@ -136,7 +136,11 @@ export const EventDetails = ({ event, blocks = defaultEventDetailsBlocks }: Even
     <>
       {blocks.map((block) => {
         if (typeof block === "function") {
-          return <Fragment key={block.name}>{block(event)}</Fragment>;
+          // React 19 widened FunctionComponent's return type to include
+          // Promise<ReactNode> for async server components. These blocks are
+          // synchronous client components invoked directly, so the promise arm
+          // is unreachable here.
+          return <Fragment key={block.name}>{block(event) as React.ReactNode}</Fragment>;
         }
 
         switch (block) {

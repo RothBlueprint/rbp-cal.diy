@@ -9,6 +9,7 @@ import {
 import type { LexicalEditor } from "lexical";
 import { TextNode } from "lexical";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { JSX } from "react";
 import { createPortal } from "react-dom";
 
 import { useLocale } from "@calcom/lib/hooks/useLocale";

@@ -1,5 +1,6 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { useState } from "react";
+import type { JSX } from "react";
 import { Controller, useFormContext } from "react-hook-form";
 
 import dayjs from "@calcom/dayjs";

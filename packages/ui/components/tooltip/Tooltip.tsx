@@ -22,7 +22,11 @@ export function Tooltip({
   defaultOpen?: boolean;
   side?: "top" | "right" | "bottom" | "left";
   onOpenChange?: (open: boolean) => void;
-} & TooltipPrimitive.TooltipContentProps) {
+  // Omit Radix's `content`: it inherits HTMLAttributes, where `content` is the HTML
+  // microdata attribute typed `string`, and the intersection made this prop
+  // `ReactNode & string`. React 19 widened ReactNode (bigint, Promise), so passing an
+  // ordinary node no longer satisfies it. The tooltip body is what we mean here.
+} & Omit<TooltipPrimitive.TooltipContentProps, "content">) {
   const Content = (
     <TooltipPrimitive.Content
       {...props}

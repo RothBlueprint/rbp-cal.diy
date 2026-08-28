@@ -46,7 +46,7 @@ export interface InstallAppButtonProps {
       useDefaultComponent?: boolean;
       isPending?: boolean;
     }
-  ) => JSX.Element;
+  ) => React.JSX.Element;
   onChanged?: () => unknown;
   disableInstall?: boolean;
 }
@@ -69,7 +69,7 @@ export type EventTypeAppCardComponentProps = {
   app: EventTypeAppCardApp;
   onAppInstallSuccess: () => void;
   disabled?: boolean;
-  LockedIcon?: JSX.Element | false;
+  LockedIcon?: React.JSX.Element | false;
   eventTypeFormMetadata?: z.infer<typeof EventTypeFormMetadataSchema>;
 };
 

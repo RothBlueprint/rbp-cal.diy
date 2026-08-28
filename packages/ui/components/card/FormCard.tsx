@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import type { JSX } from "react";
 
 import classNames from "@calcom/ui/classNames";
 

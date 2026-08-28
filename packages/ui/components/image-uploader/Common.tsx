@@ -1,6 +1,6 @@
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import type { InputEvent } from "react";
 
 type ReadAsMethod = "readAsText" | "readAsDataURL" | "readAsArrayBuffer" | "readAsBinaryString";
 
@@ -76,7 +76,11 @@ export const Slider = ({
   </SliderPrimitive.Root>
 );
 
-export interface FileEvent<T = Element> extends FormEvent<T> {
+// React 19 gave `onInput` its own event type (InputEvent) instead of reusing FormEvent,
+// so a FormEvent-based handler is no longer assignable to it. This is only used for the
+// file <input onInput>, hence InputEvent as the base; `target` is narrowed because the
+// handlers read files off it, which SyntheticEvent's EventTarget alone does not allow.
+export interface FileEvent<T = Element> extends InputEvent<T> {
   target: EventTarget & T;
 }
 

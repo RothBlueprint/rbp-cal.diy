@@ -6,6 +6,7 @@ import type {
   UseQueryResult,
 } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import type { JSX } from "react";
 
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { Alert } from "@calcom/ui/components/alert";

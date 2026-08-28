@@ -29,7 +29,7 @@ describe("Tests for DatePicker Component", () => {
       expect.objectContaining({
         isLoading: true,
       }),
-      expect.anything()
+      undefined
     );
   });
 
@@ -55,7 +55,7 @@ describe("Tests for DatePicker Component", () => {
       expect.objectContaining({
         browsingDate: dayjs().startOf("month"),
       }),
-      expect.anything()
+      undefined
     );
   });
 
@@ -86,7 +86,7 @@ describe("Tests for DatePicker Component", () => {
       expect.objectContaining({
         browsingDate: slotDate.startOf("month"),
       }),
-      expect.anything()
+      undefined
     );
   });
 
@@ -113,7 +113,7 @@ describe("Tests for DatePicker Component", () => {
       expect.objectContaining({
         browsingDate: dayjs().add(1, "month").startOf("month"),
       }),
-      expect.anything()
+      undefined
     );
   });
 });

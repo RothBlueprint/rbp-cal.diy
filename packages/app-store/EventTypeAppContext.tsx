@@ -1,4 +1,5 @@
 import React from "react";
+import type { JSX } from "react";
 import type { z, ZodType } from "zod";
 
 export type GetAppData = (key: string) => unknown;

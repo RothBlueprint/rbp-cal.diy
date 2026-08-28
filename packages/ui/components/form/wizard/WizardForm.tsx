@@ -1,6 +1,7 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
+import type { JSX } from "react";
 import { useEffect, useState } from "react";
 
 import classNames from "@calcom/ui/classNames";

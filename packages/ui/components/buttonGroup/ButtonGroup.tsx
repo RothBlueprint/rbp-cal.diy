@@ -1,4 +1,5 @@
 import React from "react";
+import type { JSX } from "react";
 
 import classNames from "@calcom/ui/classNames";
 
@@ -13,7 +14,11 @@ const sizeToRadius = {
 
 export function ButtonGroup({ children, combined = false, containerProps }: Props) {
   // Get the size from the first button child if it exists
-  const firstButton = React.Children.toArray(children)[0] as React.ReactElement;
+  // React 19 types ReactElement.props as `unknown` rather than `any`, so the shape
+  // being read has to be declared.
+  const firstButton = React.Children.toArray(children)[0] as React.ReactElement<{
+    size?: string;
+  }>;
   const size = firstButton?.props?.size || "base";
   const radius = sizeToRadius[size as keyof typeof sizeToRadius];
 
