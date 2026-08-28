@@ -198,6 +198,10 @@ export class CalendarsService {
     if (!credential) {
       throw new NotFoundException("Calendar credentials not found");
     }
+    // rbp: returned rather than discarded so the disconnect path can read credential.key
+    // (which holds the OAuth refresh token) and revoke the grant at the provider before
+    // the row is deleted. No extra query.
+    return credential;
   }
 
   async createAndLinkCalendarEntry(
