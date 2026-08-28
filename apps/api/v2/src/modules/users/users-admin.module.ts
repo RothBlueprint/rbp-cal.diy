@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConferencingModule } from "@/modules/conferencing/conferencing.module";
+import { CredentialsModule } from "@/modules/credentials/credential.module";
 import { MembershipsModule } from "@/modules/memberships/memberships.module";
 import { PrismaModule } from "@/modules/prisma/prisma.module";
 import { UsersAdminController } from "@/modules/users/controllers/users-admin.controller";
@@ -19,6 +20,7 @@ import { SchedulesModule_2024_06_11 } from "@/platform/schedules/schedules_2024_
     SchedulesModule_2024_06_11,
     BookingsModule_2024_08_13,
     ConferencingModule,
+    CredentialsModule,
     CalendarsModule,
     EventTypesModule_2024_06_14,
     WebhooksModule,
