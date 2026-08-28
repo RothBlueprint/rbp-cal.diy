@@ -1,6 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { GOOGLE_CALENDAR, OFFICE_365_CALENDAR } from "@calcom/platform-constants";
+import {
+  GOOGLE_CALENDAR,
+  GOOGLE_CALENDAR_TYPE,
+  OFFICE_365_CALENDAR,
+  OFFICE_365_CALENDAR_TYPE,
+} from "@calcom/platform-constants";
 import { UserCreationService } from "@calcom/platform-libraries";
+import { handleDeleteCredential } from "@calcom/platform-libraries/app-store";
 import type {
   CreateEventTypeInput_2024_06_14,
   GetBookingsInput_2024_08_13,
@@ -18,6 +24,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { signState } from "@/lib/oauth-state/signed-state";
 import { ConferencingService } from "@/modules/conferencing/services/conferencing.service";
+import { CredentialsRepository } from "@/modules/credentials/credentials.repository";
 import { MembershipsRepository } from "@/modules/memberships/memberships.repository";
 import { PrismaWriteService } from "@/modules/prisma/prisma-write.service";
 import { ProvisionUserInput } from "@/modules/users/inputs/provision-user.input";
@@ -26,6 +33,7 @@ import { UpsertUserWebhookInputDto } from "@/modules/webhooks/inputs/admin-user-
 import { EventTypeWebhooksService } from "@/modules/webhooks/services/event-type-webhooks.service";
 import { BookingsService_2024_08_13 } from "@/platform/bookings/2024-08-13/services/bookings.service";
 import { CalendarsService } from "@/platform/calendars/services/calendars.service";
+import { CalendarsCacheService } from "@/platform/calendars/services/calendars-cache.service";
 import { GoogleCalendarService } from "@/platform/calendars/services/gcal.service";
 import { OutlookService } from "@/platform/calendars/services/outlook.service";
 import { EventTypesService_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/services/event-types.service";
@@ -37,6 +45,13 @@ import { SchedulesService_2024_06_11 } from "@/platform/schedules/schedules_2024
 // web route (/api/auth/rbp-sso) keeps its own copy of this prefix.
 const RBP_SSO_TOKEN_IDENTIFIER_PREFIX = "rbp-sso:";
 const RBP_SSO_TOKEN_TTL_SECONDS = 60;
+
+// rbp: the `:calendar` path param is an app slug ("google"), the Credential row keys off the
+// credential type ("google_calendar"). Same pair the admin connect route already accepts.
+const CALENDAR_TYPE_BY_SLUG: Record<string, string> = {
+  [GOOGLE_CALENDAR]: GOOGLE_CALENDAR_TYPE,
+  [OFFICE_365_CALENDAR]: OFFICE_365_CALENDAR_TYPE,
+};
 
 @Injectable()
 export class UsersAdminService {
@@ -52,6 +67,8 @@ export class UsersAdminService {
     private readonly inputEventTypesService: InputEventTypesService_2024_06_14,
     private readonly eventTypeWebhooksService: EventTypeWebhooksService,
     private readonly calendarsService: CalendarsService,
+    private readonly calendarsCacheService: CalendarsCacheService,
+    private readonly credentialsRepository: CredentialsRepository,
     private readonly googleCalendarService: GoogleCalendarService,
     private readonly outlookService: OutlookService,
     private readonly dbWrite: PrismaWriteService,
@@ -477,5 +494,57 @@ export class UsersAdminService {
       throw new NotFoundException(`User with id ${userId} not found`);
     }
     return await this.conferencingService.disconnectConferencingApp(user, app);
+  }
+
+  /**
+   * rbp: admin-scoped calendar disconnect, mirroring disconnectUserConferencingApp above.
+   *
+   * The user-scoped POST /v2/calendars/:calendar/disconnect resolves the acting user from the
+   * API key's OWNER, then looks the credential up as {id, userId: owner}. Our integration
+   * authenticates with one admin key and disconnects other people's calendars, so that lookup
+   * always missed and every agent disconnect 404'd. This scopes the lookup to the :userId path
+   * param instead, which is the whole point of the route.
+   *
+   * For Google, the OAuth grant is revoked at Google BEFORE the row is deleted — the refresh
+   * token lives on the row, so deleting first and then failing to revoke would strand a live
+   * grant that nothing could revoke afterwards. See GoogleCalendarService.revokeGrant for how
+   * an already-dead token is told apart from a revoke that genuinely failed.
+   */
+  async disconnectUserCalendar(userId: number, calendar: string) {
+    const user = await this.usersRepository.findByIdWithProfile(userId);
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+
+    const type = CALENDAR_TYPE_BY_SLUG[calendar];
+    if (!type) {
+      throw new BadRequestException(
+        `Invalid calendar. Available: ${Object.keys(CALENDAR_TYPE_BY_SLUG).join(", ")}`
+      );
+    }
+
+    // Scoped to this user id, so a credential belonging to anyone else is simply never found.
+    const credentials = await this.credentialsRepository.findAllCredentialsByTypeAndUserId(type, userId);
+    if (!credentials.length) {
+      throw new NotFoundException(`User with id ${userId} has no ${calendar} calendar connected`);
+    }
+
+    // Every credential of this type, not just the first: a grant left behind on a second
+    // connection keeps the app listed at myaccount.google.com/permissions, which is the exact
+    // thing the revoke exists to prevent.
+    for (const credential of credentials) {
+      if (type === GOOGLE_CALENDAR_TYPE) {
+        await this.googleCalendarService.revokeGrant(credential.key);
+      }
+
+      await handleDeleteCredential({
+        userId,
+        userMetadata: user.metadata,
+        credentialId: credential.id,
+      });
+    }
+
+    // Without this the connected-calendars cache keeps serving the calendar we just removed.
+    await this.calendarsCacheService.deleteConnectedAndDestinationCalendarsCache(userId);
   }
 }

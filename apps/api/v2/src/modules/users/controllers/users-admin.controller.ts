@@ -323,6 +323,23 @@ export class UsersAdminController {
     return { status: SUCCESS_STATUS, data: { authUrl: data } };
   }
 
+  @Delete("/:userId/calendars/:calendar/disconnect")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Disconnect a user's calendar (admin only)",
+    description:
+      "Deletes the named user's calendar credential. Unlike the user-scoped POST /v2/calendars/{calendar}/disconnect — which resolves the credential against the API key OWNER and therefore 404s whenever an admin key disconnects somebody else's calendar — this scopes the lookup to the {userId} path param. For google it also revokes the OAuth grant at Google before deleting the row, so the app stops being listed at myaccount.google.com/permissions.",
+  })
+  @ApiParam({ name: "calendar", enum: [GOOGLE_CALENDAR, OFFICE_365_CALENDAR], required: true })
+  async disconnectUserCalendar(
+    @Param("userId", ParseIntPipe) userId: number,
+    @Param("calendar") calendar: string
+  ): Promise<AdminStatusResponse> {
+    await this.usersAdminService.disconnectUserCalendar(userId, calendar);
+
+    return { status: SUCCESS_STATUS };
+  }
+
   @Delete("/:userId/conferencing/:app/disconnect")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Disconnect a user's conferencing app (admin only)" })

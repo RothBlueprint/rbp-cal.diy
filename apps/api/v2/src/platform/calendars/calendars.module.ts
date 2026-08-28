@@ -34,6 +34,6 @@ import { Module } from "@nestjs/common";
     BookingReferencesRepository_2024_08_13,
   ],
   controllers: [CalendarsController],
-  exports: [CalendarsService, GoogleCalendarService, OutlookService],
+  exports: [CalendarsService, GoogleCalendarService, OutlookService, CalendarsCacheService],
 })
 export class CalendarsModule {}
