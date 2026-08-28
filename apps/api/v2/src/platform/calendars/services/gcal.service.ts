@@ -274,22 +274,20 @@ export class GoogleCalendarService implements OAuthCalendarApp {
       );
 
       if (alreadyExistingSelectedCalendar) {
-        const isCredentialValid = await this.calendarsService.checkCalendarCredentialValidity(
+        // rbp: always persist the key we just minted. This used to be gated on
+        // checkCalendarCredentialValidity, which only reads the stored `invalid` flag and
+        // never asks Google. A grant revoked at Google leaves invalid=false — Cal only sets
+        // it once something trips over the failure — so the gate reported "still valid", the
+        // fresh token was thrown away, and the calendar stayed stuck on "needs reconnecting"
+        // with no way out through the UI. The consent just completed, so the token in hand is
+        // authoritative regardless of what that flag claims. The upsert also clears `invalid`.
+        await this.calendarsService.createAndLinkCalendarEntry(
           ownerId,
-          alreadyExistingSelectedCalendar.credentialId ?? 0,
-          GOOGLE_CALENDAR_TYPE
+          alreadyExistingSelectedCalendar.externalId,
+          key as Prisma.InputJsonValue,
+          GOOGLE_CALENDAR_TYPE,
+          alreadyExistingSelectedCalendar.credentialId
         );
-
-        // user credential probably got expired in this case
-        if (!isCredentialValid) {
-          await this.calendarsService.createAndLinkCalendarEntry(
-            ownerId,
-            alreadyExistingSelectedCalendar.externalId,
-            key as Prisma.InputJsonValue,
-            GOOGLE_CALENDAR_TYPE,
-            alreadyExistingSelectedCalendar.credentialId
-          );
-        }
 
         return {
           url: redir || origin,
