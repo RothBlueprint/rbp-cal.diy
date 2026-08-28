@@ -158,7 +158,7 @@ export class ConferencingController {
     // be downgraded into an unauthenticated path.
     let signedState: SignedStatePayload | null = null;
     if (looksSigned(state)) {
-      signedState = verifyState(state, this.config.get("next.authSecret", { infer: true }) ?? "");
+      signedState = verifyState(state, this.config.get<string>("next.authSecret", { infer: true }) ?? "");
       if (!signedState) {
         this.logger.error("Rejected a conferencing OAuth callback with an invalid signed state");
         throw new BadRequestException("Invalid `state`");

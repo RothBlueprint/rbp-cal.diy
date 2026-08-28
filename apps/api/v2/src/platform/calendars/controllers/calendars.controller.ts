@@ -217,7 +217,7 @@ export class CalendarsController {
     // bad signature would hand a forgery to the legacy parsers below, so an
     // invalid signed state is refused outright.
     if (looksSigned(state)) {
-      const signed = verifyState(state, this.config.get("next.authSecret", { infer: true }) ?? "");
+      const signed = verifyState(state, this.config.get<string>("next.authSecret", { infer: true }) ?? "");
       if (!signed) {
         throw new BadRequestException("Invalid `state`");
       }

@@ -422,7 +422,7 @@ export class UsersAdminService {
     await this.requireUser(userId);
     const state = signState(
       { userId, returnTo, onErrorReturnTo },
-      this.configService.get("next.authSecret", { infer: true }) ?? ""
+      this.configService.get<string>("next.authSecret", { infer: true }) ?? ""
     );
     return await this.conferencingService.generateOAuthUrlWithRawState(app, state);
   }
@@ -450,7 +450,7 @@ export class UsersAdminService {
     await this.requireUser(userId);
     const state = signState(
       { userId, returnTo },
-      this.configService.get("next.authSecret", { infer: true }) ?? ""
+      this.configService.get<string>("next.authSecret", { infer: true }) ?? ""
     );
 
     switch (calendar) {
