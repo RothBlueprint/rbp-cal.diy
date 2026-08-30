@@ -186,7 +186,13 @@ class InputLocationValidator_2024_06_14 implements ValidatorConstraintInterface 
       const ClassType = this.classTypeMap[type];
       if (!ClassType) {
         throw new BadRequestException(
-          `Unsupported location type '${type}'. Valid types are address, link, integration, and phone.`
+          // rbp: derived from the map, not spelled out beside it. The
+          // hard-coded list had already drifted -- it named four of the seven
+          // types this accepted -- and a list that lies about what is valid
+          // sends the caller looking for a fault in their own payload.
+          `Unsupported location type '${type}'. Valid types are ${Object.keys(this.classTypeMap).join(
+            ", "
+          )}.`
         );
       }
 
@@ -241,7 +247,13 @@ class InputTeamLocationValidator_2024_06_14 implements ValidatorConstraintInterf
       const ClassType = this.classTypeMap[type];
       if (!ClassType) {
         throw new BadRequestException(
-          `Unsupported location type '${type}'. Valid types are address, link, integration, and phone.`
+          // rbp: derived from the map, not spelled out beside it. The
+          // hard-coded list had already drifted -- it named four of the seven
+          // types this accepted -- and a list that lies about what is valid
+          // sends the caller looking for a fault in their own payload.
+          `Unsupported location type '${type}'. Valid types are ${Object.keys(this.classTypeMap).join(
+            ", "
+          )}.`
         );
       }
 
