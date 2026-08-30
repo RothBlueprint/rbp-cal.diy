@@ -599,6 +599,7 @@ export class CreateEventTypeInput_2024_06_14 extends BaseCreateEventTypeInput {
       { $ref: getSchemaPath(InputAttendeeAddressLocation_2024_06_14) },
       { $ref: getSchemaPath(InputAttendeePhoneLocation_2024_06_14) },
       { $ref: getSchemaPath(InputAttendeeDefinedLocation_2024_06_14) },
+      { $ref: getSchemaPath(InputOrganizersDefaultApp_2024_06_14) },
     ],
     type: "array",
   })
