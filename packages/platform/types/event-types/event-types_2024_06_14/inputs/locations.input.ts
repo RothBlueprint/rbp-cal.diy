@@ -141,7 +141,13 @@ export type InputLocation_2024_06_14 =
   | InputPhoneLocation_2024_06_14
   | InputAttendeeAddressLocation_2024_06_14
   | InputAttendeePhoneLocation_2024_06_14
-  | InputAttendeeDefinedLocation_2024_06_14;
+  | InputAttendeeDefinedLocation_2024_06_14
+  // rbp: personal event types accept the organizer's default app too. The web
+  // UI has always offered it for them (defaultLocations in app-store/locations
+  // is not team-gated) and both the internal zod union and the internal-to-api
+  // transformer already round-trip "conferencing" — only this input side left
+  // it out, so the API rejected a location its own GET would hand back.
+  | InputOrganizersDefaultApp_2024_06_14;
 
 export type InputTeamLocation_2024_06_14 = InputLocation_2024_06_14 | InputOrganizersDefaultApp_2024_06_14;
 
@@ -155,6 +161,7 @@ class InputLocationValidator_2024_06_14 implements ValidatorConstraintInterface 
     attendeePhone: InputAttendeePhoneLocation_2024_06_14,
     attendeeAddress: InputAttendeeAddressLocation_2024_06_14,
     attendeeDefined: InputAttendeeDefinedLocation_2024_06_14,
+    organizersDefaultApp: InputOrganizersDefaultApp_2024_06_14,
   };
 
   async validate(locations: { type: string }[]) {

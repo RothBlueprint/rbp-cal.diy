@@ -73,6 +73,12 @@ function transformLocation<T extends InputLocation_2024_06_14>(location: T) {
       return { type: "phone" } satisfies AttendeePhoneLocation;
     case "attendeeDefined":
       return { type: "somewhereElse" } satisfies AttendeeDefinedLocation;
+    // rbp: shared with the team path below, which special-cased this before it
+    // was reachable here. Resolved per booking off the organizer's
+    // metadata.defaultConferencingApp, falling back to Cal Video when they have
+    // not picked one — see RegularBookingService.
+    case "organizersDefaultApp":
+      return { type: "conferencing" } satisfies OrganizerConferencingSchema;
     default:
       throw new Error(`Unsupported input location type '${type}'`);
   }
