@@ -1267,3 +1267,148 @@ it("returns the single user correctly without fetching data when only one user a
   expect(spyPrismaBooking).not.toHaveBeenCalled();
   expect(spyPrismaOOO).not.toHaveBeenCalled();
 });
+
+describe("rbp: preferredUserIds (state preference)", () => {
+  // Equal priority throughout, so the ONLY thing that moves the winner is the
+  // preference. Least-recently-booked breaks ties, so with no preference the
+  // winner is always the oldest booking — first here.
+  const buildTrio = () => [
+    buildUser({
+      id: 1,
+      username: "az",
+      name: "AZ Agent",
+      email: "az@example.com",
+      priority: 2,
+      bookings: [{ createdAt: new Date("2022-01-25T01:00:00.000Z") }],
+    }),
+    buildUser({
+      id: 2,
+      username: "fl",
+      name: "FL Agent",
+      email: "fl@example.com",
+      priority: 2,
+      bookings: [{ createdAt: new Date("2022-01-25T02:00:00.000Z") }],
+    }),
+    buildUser({
+      id: 3,
+      username: "ca",
+      name: "CA Agent",
+      email: "ca@example.com",
+      priority: 2,
+      bookings: [{ createdAt: new Date("2022-01-25T03:00:00.000Z") }],
+    }),
+  ];
+
+  const eventType = {
+    id: 1,
+    isRRWeightsEnabled: false,
+    team: { rrResetInterval: RRResetInterval.MONTH, rrTimestampBasis: RRTimestampBasis.CREATED_AT },
+    includeNoShowInRRCalculation: false,
+  };
+
+  const mockAll = (users: GetLuckyUserAvailableUsersType) => {
+    prismaMock.user.findMany.mockResolvedValue(users);
+    prismaMock.booking.findMany.mockResolvedValue([]);
+    prismaMock.host.findMany.mockResolvedValue([]);
+    prismaMock.outOfOfficeEntry.findMany.mockResolvedValue([]);
+  };
+
+  it("picks the preferred agent over the one round-robin would have chosen", async () => {
+    const users = buildTrio() as GetLuckyUserAvailableUsersType;
+    mockAll(users);
+    // users[2] is LAST in line by least-recently-booked, so winning can only be
+    // the preference talking.
+    await expect(
+      luckyUserService.getLuckyUser({
+        availableUsers: users,
+        eventType,
+        allRRHosts: [],
+        preferredUserIds: [3],
+      })
+    ).resolves.toStrictEqual(users[2]);
+  });
+
+  it("changes nothing when no available agent is preferred", async () => {
+    const users = buildTrio() as GetLuckyUserAvailableUsersType;
+    mockAll(users);
+    // The lead's state has agents, but none of them is free for this slot.
+    await expect(
+      luckyUserService.getLuckyUser({
+        availableUsers: users,
+        eventType,
+        allRRHosts: [],
+        preferredUserIds: [999],
+      })
+    ).resolves.toStrictEqual(users[0]);
+  });
+
+  it("changes nothing when the lead has no state (param absent)", async () => {
+    const users = buildTrio() as GetLuckyUserAvailableUsersType;
+    mockAll(users);
+    await expect(
+      luckyUserService.getLuckyUser({ availableUsers: users, eventType, allRRHosts: [] })
+    ).resolves.toStrictEqual(users[0]);
+  });
+
+  it("lets an explicit nudge (priority 4) outrank state preference", async () => {
+    const nudged = buildUser({
+      id: 10,
+      username: "nudged",
+      name: "Nudged Agent",
+      email: "nudged@example.com",
+      priority: 4,
+      // Newest booking: least-recently-booked would rank this LAST.
+      bookings: [{ createdAt: new Date("2022-01-25T09:00:00.000Z") }],
+    });
+    const inState = buildUser({
+      id: 11,
+      username: "instate",
+      name: "In-State Agent",
+      email: "instate@example.com",
+      priority: 2,
+      bookings: [{ createdAt: new Date("2022-01-25T01:00:00.000Z") }],
+    });
+    const users = [nudged, inState] as GetLuckyUserAvailableUsersType;
+    mockAll(users);
+    await expect(
+      luckyUserService.getLuckyUser({
+        availableUsers: users,
+        eventType,
+        allRRHosts: [],
+        preferredUserIds: [11],
+      })
+    ).resolves.toStrictEqual(nudged);
+  });
+
+  it("does not demote an agent who is both nudged and in-state", async () => {
+    // The max() guard. Written so a plain assignment (priority = 3) FAILS:
+    // it would drop `both` from 4 to 3, tying with `atThree`, and the tie
+    // breaks to `atThree` on the older booking.
+    const both = buildUser({
+      id: 20,
+      username: "both",
+      name: "Nudged And In State",
+      email: "both@example.com",
+      priority: 4,
+      bookings: [{ createdAt: new Date("2022-01-25T09:00:00.000Z") }],
+    });
+    const atThree = buildUser({
+      id: 21,
+      username: "atthree",
+      name: "Priority Three Agent",
+      email: "atthree@example.com",
+      priority: 3,
+      bookings: [{ createdAt: new Date("2022-01-25T01:00:00.000Z") }],
+    });
+    const users = [both, atThree] as GetLuckyUserAvailableUsersType;
+    mockAll(users);
+    await expect(
+      luckyUserService.getLuckyUser({
+        availableUsers: users,
+        eventType,
+        allRRHosts: [],
+        preferredUserIds: [20],
+      })
+    ).resolves.toStrictEqual(both);
+  });
+});

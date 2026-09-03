@@ -14,6 +14,18 @@ import type { CredentialForCalendarService } from "@calcom/types/Credential";
 
 const log = logger.getSubLogger({ prefix: ["getLuckyUser"] });
 
+/**
+ * Host priority rungs. Cal stores 0-4 on Host.priority; a host that has never
+ * been given one reads as null and is treated as the default.
+ *
+ * rbp uses the top of the scale deliberately:
+ *   4  an explicit nudge — this agent needs catching up
+ *   3  state preference — the lead is in this agent's state
+ *   2  the default
+ */
+const DEFAULT_HOST_PRIORITY = 2;
+const STATE_PREFERENCE_PRIORITY = 3;
+
 type PartialBooking = Pick<Booking, "id" | "createdAt" | "userId" | "status"> & {
   attendees: { email: string | null }[];
 };
@@ -52,6 +64,20 @@ interface GetLuckyUserParams<T extends PartialUser> {
     weight?: number | null;
   }[];
   meetingStartTime?: Date;
+  /**
+   * rbp: user ids to prefer for THIS booking, on top of whatever standing
+   * priority each host carries. Used to route a lead to an agent in the
+   * lead's own state.
+   *
+   * Deliberately a per-request hint rather than a Host.priority edit: the
+   * preference depends on who is booking, and Host.priority is per
+   * (user, eventType) and shared by every lead.
+   *
+   * Empty or absent means "no preference" — the selection is byte-for-byte
+   * what it was before, which is the behaviour for a lead whose state we
+   * never captured.
+   */
+  preferredUserIds?: number[];
 }
 
 // === Utility Functions kept outside of the class ===
@@ -310,12 +336,37 @@ export class LuckyUserService implements ILuckyUserService {
 
   private getUsersWithHighestPriority<T extends PartialUser & { priority?: number | null }>({
     availableUsers,
+    preferredUserIds,
   }: {
     availableUsers: T[];
+    preferredUserIds?: number[];
   }) {
-    const highestPriority = Math.max(...availableUsers.map((user) => user.priority ?? 2));
+    const preferred = preferredUserIds?.length ? new Set(preferredUserIds) : null;
+
+    /**
+     * rbp: the priority this user counts as for THIS booking.
+     *
+     * A preferred user (one in the lead's own state) is lifted to the state
+     * preference rung. Math.max, never assignment: an agent can be both
+     * nudged to 4 and in the lead's state, and overwriting with 3 would
+     * silently demote them and invert the ladder.
+     *
+     * Computed rather than written onto the user, so the object handed back
+     * as the lucky user is the one that came in — same identity, and its
+     * priority still reflects the database rather than a routing decision.
+     *
+     * Note this also lifts a host sitting BELOW the default (0/1), which is
+     * fine while nothing sets those; if deliberate deprioritisation is ever
+     * used, restrict the lift to hosts at the default instead.
+     */
+    const effectivePriority = (user: T) => {
+      const standing = user.priority ?? DEFAULT_HOST_PRIORITY;
+      return preferred?.has(user.id) ? Math.max(standing, STATE_PREFERENCE_PRIORITY) : standing;
+    };
+
+    const highestPriority = Math.max(...availableUsers.map(effectivePriority));
     const usersWithHighestPriority = availableUsers.filter(
-      (user) => user.priority === highestPriority || (user.priority == null && highestPriority === 2)
+      (user) => effectivePriority(user) === highestPriority
     );
     if (!isNonEmptyArray(usersWithHighestPriority)) {
       throw new Error("Internal Error: Highest Priority filter should never return length=0.");
@@ -727,6 +778,7 @@ export class LuckyUserService implements ILuckyUserService {
       allRRHostsCreatedInInterval,
       organizersWithLastCreated,
       oooData,
+      preferredUserIds,
     } = getLuckyUserParams;
 
     if (availableUsers.length === 1) {
@@ -756,7 +808,7 @@ export class LuckyUserService implements ILuckyUserService {
       usersAndTheirBookingShortfalls = _usersAndTheirBookingShortfalls;
     }
 
-    const highestPriorityUsers = this.getUsersWithHighestPriority({ availableUsers });
+    const highestPriorityUsers = this.getUsersWithHighestPriority({ availableUsers, preferredUserIds });
     if (highestPriorityUsers.length === 1) {
       return {
         luckyUser: highestPriorityUsers[0],
