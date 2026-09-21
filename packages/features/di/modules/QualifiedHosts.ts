@@ -1,3 +1,5 @@
+import { filterHostsToOriginalRoundRobinHost } from "@calcom/features/bookings/lib/host-filtering/getFilterHostsService";
+
 import { createModule } from "../di";
 import { DI_TOKENS } from "../tokens";
 
@@ -18,6 +20,8 @@ qualifiedHostsModule.bind(DI_TOKENS.QUALIFIED_HOSTS_SERVICE).toValue({
     const eventType = (input.eventType ?? {}) as Record<string, unknown>;
     const contactOwnerEmail = input.contactOwnerEmail as string | null | undefined;
     const routedTeamMemberIds = (input.routedTeamMemberIds ?? []) as number[];
+    const rescheduleUid = (input.rescheduleUid ?? null) as string | null;
+    const rescheduleWithSameRoundRobinHost = Boolean(eventType.rescheduleWithSameRoundRobinHost);
 
     const hosts = (eventType.hosts ?? []) as Host[];
     const users = (eventType.users ?? []) as User[];
@@ -57,6 +61,31 @@ qualifiedHostsModule.bind(DI_TOKENS.QUALIFIED_HOSTS_SERVICE).toValue({
         const routedHosts = allRRHosts.filter((h) => routedMemberIdSet.has((h.user as { id: number }).id));
         if (routedHosts.length > 0) {
           qualifiedRRHosts = routedHosts;
+        }
+      }
+
+      // The pairing rule outranks routing preference, so this runs last and
+      // filters `allRRHosts` rather than the narrowed set — the agent already
+      // on the meeting need not be in the routed subset.
+      if (rescheduleUid && schedulingType === "ROUND_ROBIN" && rescheduleWithSameRoundRobinHost) {
+        const sameHostOnly = await filterHostsToOriginalRoundRobinHost({
+          hosts: allRRHosts.map((host) => ({
+            isFixed: false as const,
+            user: host.user as { id: number; email: string },
+            host,
+          })),
+          rescheduleUid,
+          rescheduleWithSameRoundRobinHost: true,
+        });
+        if (sameHostOnly.length) {
+          return {
+            qualifiedRRHosts: sameHostOnly.map((entry) => entry.host),
+            // Deliberately empty. Cal widens to `allFallbackRRHosts` when the
+            // qualified host has no opening inside two weeks, and that widening
+            // is precisely how a rescheduling client lands on a stranger.
+            allFallbackRRHosts: [],
+            fixedHosts,
+          };
         }
       }
 

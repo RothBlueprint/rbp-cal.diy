@@ -9,6 +9,7 @@ import { HttpError } from "@calcom/lib/http-error";
 import { getPiiFreeUser } from "@calcom/lib/piiFreeData";
 import { safeStringify } from "@calcom/lib/safeStringify";
 import { withReporting } from "@calcom/lib/sentryWrapper";
+import { filterHostsToOriginalRoundRobinHost } from "../host-filtering/getFilterHostsService";
 import prisma, { userSelect } from "@calcom/prisma";
 import type { Prisma } from "@calcom/prisma/client";
 import { SchedulingType } from "@calcom/prisma/enums";
@@ -94,6 +95,29 @@ const _loadAndValidateUsers = async ({
     routedTeamMemberIds,
     contactOwnerEmail,
   });
+
+  // A reschedule may never move a client onto a different agent. The booking
+  // path does not get real host qualification here — `getQualifiedHostsService`
+  // returns a no-op on this fork, so every host falls through as eligible — so
+  // the constraint is applied to the loaded users directly, before anything
+  // downstream can draw a lucky user.
+  if (
+    rescheduleUid &&
+    eventType.schedulingType === SchedulingType.ROUND_ROBIN &&
+    eventType.rescheduleWithSameRoundRobinHost
+  ) {
+    const sameHostOnly = await filterHostsToOriginalRoundRobinHost({
+      hosts: users.map((user) => ({ isFixed: false as const, user })),
+      rescheduleUid,
+      rescheduleWithSameRoundRobinHost: true,
+    });
+    // Empty means the original host is no longer on this event type, which only
+    // an admin can cause — the one sanctioned way a pairing moves. Leaving the
+    // list alone beats making the reschedule impossible to fulfil.
+    if (sameHostOnly.length) {
+      users = sameHostOnly.map((host) => host.user);
+    }
+  }
 
   const isDynamicAllowed = !users.some((user) => !user.allowDynamicBooking);
   if (!isDynamicAllowed && !eventTypeId) {
