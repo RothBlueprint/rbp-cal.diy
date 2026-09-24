@@ -2926,9 +2926,11 @@ describe("handleNewBooking", () => {
           expect(createdBooking.startTime?.toISOString()).toBe(`${plus1DateString}T04:00:00.000Z`);
           expect(createdBooking.endTime?.toISOString()).toBe(`${plus1DateString}T04:15:00.000Z`);
 
-          // After EE removal, rescheduleWithSameRoundRobinHost logic is gone,
-          // so round-robin may reassign to a different host (host 101 in this case)
-          expect(createdBooking.userId).toBe(roundRobinHost1.id);
+          // Stays with the host of the booking being rescheduled (102), not the
+          // organizer the request names. The squash that removed the EE code
+          // rewrote this line to expect a reassignment to 101; restoring
+          // rescheduleWithSameRoundRobinHost restores the original expectation.
+          expect(createdBooking.userId).toBe(previousBooking?.userId ?? -1);
 
           await expectBookingInDBToBeRescheduledFromTo({
             from: {
@@ -2958,8 +2960,13 @@ describe("handleNewBooking", () => {
       );
 
       test(
-        "should reschedule as per routedTeamMemberIds(instead of same host) even if rescheduleWithSameRoundRobinHost is true but it is a rerouting scenario",
+        "should keep the original host even when the reschedule carries routedTeamMemberIds",
         async ({ emails }) => {
+          // Upstream reads rescheduleUid + routedTeamMemberIds as staff re-running
+          // a routing form, and moves the host. This fork uses routedTeamMemberIds
+          // for same-state preference on a URL the client holds, so it must not
+          // move a pairing — and the booking path applies routing BEFORE the
+          // same-host rule, so the original host is not even in the routed list.
           const handleNewBooking = getNewBookingHandler();
           const booker = getBooker({
             email: "booker@example.com",
@@ -2973,6 +2980,7 @@ describe("handleNewBooking", () => {
             schedules: [TestData.schedules.IstWorkHours],
             credentials: [getGoogleCalendarCredential()],
             selectedCalendars: [TestData.selectedCalendars.google],
+            teams: [{ membership: { accepted: true }, team: { id: 1, name: "Team 1", slug: "team-1" } }],
           });
 
           const hostOfOriginalBooking = getOrganizer({
@@ -2982,6 +2990,7 @@ describe("handleNewBooking", () => {
             schedules: [TestData.schedules.IstWorkHours],
             credentials: [getGoogleCalendarCredential()],
             selectedCalendars: [TestData.selectedCalendars.google],
+            teams: [{ membership: { accepted: true }, team: { id: 1, name: "Team 1", slug: "team-1" } }],
           });
 
           const { dateString: plus1DateString } = getDate({ dateIncrement: 1 });
@@ -2993,6 +3002,7 @@ describe("handleNewBooking", () => {
                   id: 1,
                   slotInterval: 15,
                   length: 15,
+                  teamId: 1,
                   hosts: [
                     {
                       userId: 101,
@@ -3085,7 +3095,7 @@ describe("handleNewBooking", () => {
           expect(createdBooking.startTime?.toISOString()).toBe(`${plus1DateString}T04:00:00.000Z`);
           expect(createdBooking.endTime?.toISOString()).toBe(`${plus1DateString}T04:15:00.000Z`);
 
-          expect(createdBooking.userId).toBe(otherHost.id);
+          expect(createdBooking.userId).toBe(hostOfOriginalBooking.id);
 
           await expectBookingInDBToBeRescheduledFromTo({
             from: {
@@ -3107,7 +3117,125 @@ describe("handleNewBooking", () => {
 
           expectSuccessfulRoundRobinReschedulingEmails({
             prevOrganizer: hostOfOriginalBooking,
-            newOrganizer: otherHost,
+            newOrganizer: hostOfOriginalBooking,
+            emails,
+          });
+        },
+        timeout
+      );
+
+      test(
+        "should keep the original host after they have left the event type's hosts",
+        async ({ emails }) => {
+          // Production, 2026-09-24: rbp removes an agent from the pool the moment
+          // their paid appointments are delivered, while their clients' meetings
+          // are still ahead. A client who then rescheduled was redrawn onto
+          // another agent, because the original host was no longer in the host
+          // list the same-host rule searched.
+          const handleNewBooking = getNewBookingHandler();
+          const booker = getBooker({
+            email: "booker@example.com",
+            name: "Booker",
+          });
+
+          const agentStillInPool = getOrganizer({
+            name: "RR Host 1",
+            email: "rrhost1@example.com",
+            id: 101,
+            schedules: [TestData.schedules.IstWorkHours],
+            credentials: [getGoogleCalendarCredential()],
+            selectedCalendars: [TestData.selectedCalendars.google],
+            teams: [{ membership: { accepted: true }, team: { id: 1, name: "Team 1", slug: "team-1" } }],
+          });
+
+          const agentWhoLeftPool = getOrganizer({
+            name: "RR Host 2",
+            email: "rrhost2@example.com",
+            id: 102,
+            schedules: [TestData.schedules.IstWorkHours],
+            credentials: [getGoogleCalendarCredential()],
+            selectedCalendars: [TestData.selectedCalendars.google],
+            teams: [{ membership: { accepted: true }, team: { id: 1, name: "Team 1", slug: "team-1" } }],
+          });
+
+          const { dateString: plus1DateString } = getDate({ dateIncrement: 1 });
+          const uidOfBookingToBeRescheduled = "n5Wv3eHgconAED2j4gcVhP";
+          await createBookingScenario(
+            getScenarioData({
+              eventTypes: [
+                {
+                  id: 1,
+                  slotInterval: 15,
+                  length: 15,
+                  teamId: 1,
+                  // Only 101 is still a host; 102 left the pool after the booking.
+                  hosts: [{ userId: 101, isFixed: false }],
+                  schedulingType: SchedulingType.ROUND_ROBIN,
+                  rescheduleWithSameRoundRobinHost: true,
+                },
+              ],
+              bookings: [
+                {
+                  uid: uidOfBookingToBeRescheduled,
+                  eventTypeId: 1,
+                  userId: 102,
+                  status: BookingStatus.ACCEPTED,
+                  startTime: `${plus1DateString}T05:00:00.000Z`,
+                  endTime: `${plus1DateString}T05:15:00.000Z`,
+                  metadata: {
+                    videoCallUrl: "https://existing-daily-video-call-url.example.com",
+                  },
+                },
+              ],
+              organizer: agentStillInPool,
+              usersApartFromOrganizer: [agentWhoLeftPool],
+              apps: [TestData.apps["google-calendar"], TestData.apps["daily-video"]],
+            })
+          );
+
+          mockSuccessfulVideoMeetingCreation({
+            metadataLookupKey: "dailyvideo",
+          });
+
+          mockCalendarToHaveNoBusySlots("googlecalendar", {
+            create: {
+              uid: "MOCK_ID",
+            },
+            update: {
+              uid: "UPDATED_MOCK_ID",
+              iCalUID: "MOCKED_GOOGLE_CALENDAR_ICS_ID",
+            },
+          });
+
+          const mockBookingData = getMockRequestDataForBooking({
+            data: {
+              eventTypeId: 1,
+              user: agentStillInPool.name,
+              rescheduleUid: uidOfBookingToBeRescheduled,
+              start: `${plus1DateString}T04:00:00.000Z`,
+              end: `${plus1DateString}T04:15:00.000Z`,
+              responses: {
+                email: booker.email,
+                name: booker.name,
+                location: { optionValue: "", value: BookingLocations.CalVideo },
+              },
+            },
+          });
+
+          const createdBooking = await handleNewBooking({
+            bookingData: mockBookingData,
+          });
+
+          await expectBookingToBeInDatabase({
+            uid: uidOfBookingToBeRescheduled,
+            status: BookingStatus.CANCELLED,
+          });
+          expect(createdBooking.startTime?.toISOString()).toBe(`${plus1DateString}T04:00:00.000Z`);
+          expect(createdBooking.userId).toBe(agentWhoLeftPool.id);
+
+          expectSuccessfulRoundRobinReschedulingEmails({
+            prevOrganizer: agentWhoLeftPool,
+            newOrganizer: agentWhoLeftPool,
             emails,
           });
         },

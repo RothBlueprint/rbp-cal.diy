@@ -9,7 +9,7 @@ import { HttpError } from "@calcom/lib/http-error";
 import { getPiiFreeUser } from "@calcom/lib/piiFreeData";
 import { safeStringify } from "@calcom/lib/safeStringify";
 import { withReporting } from "@calcom/lib/sentryWrapper";
-import { filterHostsToOriginalRoundRobinHost } from "../host-filtering/getFilterHostsService";
+import { keepOriginalRoundRobinHost } from "../host-filtering/getFilterHostsService";
 import prisma, { userSelect } from "@calcom/prisma";
 import type { Prisma } from "@calcom/prisma/client";
 import { SchedulingType } from "@calcom/prisma/enums";
@@ -100,20 +100,23 @@ const _loadAndValidateUsers = async ({
   // path does not get real host qualification here — `getQualifiedHostsService`
   // returns a no-op on this fork, so every host falls through as eligible — so
   // the constraint is applied to the loaded users directly, before anything
-  // downstream can draw a lucky user.
+  // downstream can draw a lucky user. `users` is already narrowed by routing and
+  // no longer holds an agent who has left the pool; the helper reaches past both.
   if (
     rescheduleUid &&
     eventType.schedulingType === SchedulingType.ROUND_ROBIN &&
     eventType.rescheduleWithSameRoundRobinHost
   ) {
-    const sameHostOnly = await filterHostsToOriginalRoundRobinHost({
+    const sameHostOnly = await keepOriginalRoundRobinHost({
       hosts: users.map((user) => ({ isFixed: false as const, user })),
       rescheduleUid,
-      rescheduleWithSameRoundRobinHost: true,
+      eventTypeId: eventType.id,
+      teamId: eventType.teamId ?? null,
+      toHost: (user) => ({ isFixed: false as const, user: { ...user, isFixed: false } }),
     });
-    // Empty means the original host is no longer on this event type, which only
-    // an admin can cause — the one sanctioned way a pairing moves. Leaving the
-    // list alone beats making the reschedule impossible to fulfil.
+    // Empty means there is no pairing left to keep — the original host has left
+    // the team, which only an admin can cause. Leaving the list alone beats
+    // making the reschedule impossible to fulfil.
     if (sameHostOnly.length) {
       users = sameHostOnly.map((host) => host.user);
     }

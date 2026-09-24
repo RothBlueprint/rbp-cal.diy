@@ -1,5 +1,4 @@
-import { filterHostsToOriginalRoundRobinHost } from "@calcom/features/bookings/lib/host-filtering/getFilterHostsService";
-
+import { keepOriginalRoundRobinHost } from "@calcom/features/bookings/lib/host-filtering/getFilterHostsService";
 import { createModule } from "../di";
 import { DI_TOKENS } from "../tokens";
 
@@ -27,25 +26,60 @@ qualifiedHostsModule.bind(DI_TOKENS.QUALIFIED_HOSTS_SERVICE).toValue({
     const users = (eventType.users ?? []) as User[];
     const schedulingType = eventType.schedulingType as string | null | undefined;
 
+    const fixedHosts: QualifiedHost[] = [];
+    const allRRHosts: QualifiedHost[] = [];
+
+    for (const host of hosts) {
+      const qualifiedHost: QualifiedHost = {
+        user: host.user,
+        isFixed: host.isFixed,
+        groupId: host.groupId ?? null,
+      };
+
+      if (host.isFixed || schedulingType !== "ROUND_ROBIN") {
+        fixedHosts.push(qualifiedHost);
+      } else {
+        allRRHosts.push(qualifiedHost);
+      }
+    }
+
+    // The pairing rule outranks routing preference, so this runs before routing
+    // and considers `allRRHosts` rather than a narrowed set — and reaches past
+    // the host list entirely when the agent on the meeting has left the pool.
+    // Placed ahead of the `hosts.length` check for that reason: a pool emptied
+    // by every agent reaching their quota must still let existing clients move
+    // their meetings with the agent they already have.
+    if (rescheduleUid && schedulingType === "ROUND_ROBIN" && rescheduleWithSameRoundRobinHost) {
+      const team = (eventType.team ?? null) as { id: number } | null;
+      const sameHostOnly = await keepOriginalRoundRobinHost({
+        hosts: allRRHosts.map((host) => ({
+          isFixed: false as const,
+          user: host.user as { id: number; email: string },
+          host,
+        })),
+        rescheduleUid,
+        eventTypeId: eventType.id as number,
+        teamId: team?.id ?? null,
+        toHost: (user) => ({
+          isFixed: false as const,
+          user,
+          host: { user, isFixed: false, groupId: null },
+        }),
+      });
+      if (sameHostOnly.length) {
+        return {
+          qualifiedRRHosts: sameHostOnly.map((entry) => entry.host),
+          // Deliberately empty. Cal widens to `allFallbackRRHosts` when the
+          // qualified host has no opening inside two weeks, and that widening
+          // is precisely how a rescheduling client lands on a stranger.
+          allFallbackRRHosts: [],
+          fixedHosts,
+        };
+      }
+    }
+
     // For team events with hosts array
     if (hosts.length > 0) {
-      const fixedHosts: QualifiedHost[] = [];
-      const allRRHosts: QualifiedHost[] = [];
-
-      for (const host of hosts) {
-        const qualifiedHost: QualifiedHost = {
-          user: host.user,
-          isFixed: host.isFixed,
-          groupId: host.groupId ?? null,
-        };
-
-        if (host.isFixed || schedulingType !== "ROUND_ROBIN") {
-          fixedHosts.push(qualifiedHost);
-        } else {
-          allRRHosts.push(qualifiedHost);
-        }
-      }
-
       // Filter qualifiedRRHosts based on contactOwnerEmail or routedTeamMemberIds
       let qualifiedRRHosts = allRRHosts;
 
@@ -61,31 +95,6 @@ qualifiedHostsModule.bind(DI_TOKENS.QUALIFIED_HOSTS_SERVICE).toValue({
         const routedHosts = allRRHosts.filter((h) => routedMemberIdSet.has((h.user as { id: number }).id));
         if (routedHosts.length > 0) {
           qualifiedRRHosts = routedHosts;
-        }
-      }
-
-      // The pairing rule outranks routing preference, so this runs last and
-      // filters `allRRHosts` rather than the narrowed set — the agent already
-      // on the meeting need not be in the routed subset.
-      if (rescheduleUid && schedulingType === "ROUND_ROBIN" && rescheduleWithSameRoundRobinHost) {
-        const sameHostOnly = await filterHostsToOriginalRoundRobinHost({
-          hosts: allRRHosts.map((host) => ({
-            isFixed: false as const,
-            user: host.user as { id: number; email: string },
-            host,
-          })),
-          rescheduleUid,
-          rescheduleWithSameRoundRobinHost: true,
-        });
-        if (sameHostOnly.length) {
-          return {
-            qualifiedRRHosts: sameHostOnly.map((entry) => entry.host),
-            // Deliberately empty. Cal widens to `allFallbackRRHosts` when the
-            // qualified host has no opening inside two weeks, and that widening
-            // is precisely how a rescheduling client lands on a stranger.
-            allFallbackRRHosts: [],
-            fixedHosts,
-          };
         }
       }
 
