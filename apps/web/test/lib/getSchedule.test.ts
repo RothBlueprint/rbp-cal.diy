@@ -20,7 +20,7 @@ import dayjs from "@calcom/dayjs";
 import { getAvailableSlotsService } from "@calcom/features/di/containers/AvailableSlots";
 import { SchedulingType, type BookingStatus } from "@calcom/prisma/enums";
 
-import { expect, expectedSlotsForSchedule } from "./getSchedule/expects";
+import { expect } from "./getSchedule/expects";
 import { setupAndTeardown } from "./getSchedule/setupAndTeardown";
 import { timeTravelToTheBeginningOfToday } from "./getSchedule/utils";
 
@@ -3540,29 +3540,101 @@ describe("getSchedule", () => {
         },
       });
 
-      // With EE removal, rescheduleWithSameRoundRobinHost no longer filters to same host - all hosts' slots shown
+      // Only the original host's (101, IstEveningShift) slots. The squash that
+      // removed the EE code rewrote this to expect every host's slots; restoring
+      // rescheduleWithSameRoundRobinHost restores the filter.
       expect(schedule).toHaveTimeSlots(
-        [
-          `04:30:00.000Z`,
-          `05:30:00.000Z`,
-          `06:30:00.000Z`,
-          `07:30:00.000Z`,
-          `08:30:00.000Z`,
-          `09:30:00.000Z`,
-          `10:30:00.000Z`,
-          `11:30:00.000Z`,
-          `12:30:00.000Z`,
-          `13:30:00.000Z`,
-          `14:30:00.000Z`,
-          `15:30:00.000Z`,
-        ],
+        [`11:30:00.000Z`, `12:30:00.000Z`, `13:30:00.000Z`, `14:30:00.000Z`, `15:30:00.000Z`],
         {
           dateString: plus2DateString,
         }
       );
     });
 
-    test("Reschedule: should show timeslots as per routedTeamMemberIds(instead of same host) even if rescheduleWithSameRoundRobinHost is true but it is a rerouting scenario",async () => {
+    test("Reschedule: should show the original host's timeslots after they have left the event type's hosts", async () => {
+      // Production, 2026-09-24: rbp drops an agent from the pool once their paid
+      // appointments are delivered, while their clients' meetings are still
+      // ahead. Rescheduling one of those must still offer that agent's times.
+      vi.setSystemTime("2024-05-21T00:00:13Z");
+
+      const plus1DateString = "2024-05-22";
+      const plus2DateString = "2024-05-23";
+      const team = { membership: { accepted: true }, team: { id: 1, name: "Team 1", slug: "team-1" } };
+
+      await createBookingScenario({
+        eventTypes: [
+          {
+            id: 1,
+            slotInterval: 60,
+            length: 60,
+            teamId: 1,
+            rescheduleWithSameRoundRobinHost: true,
+            // 101 hosted the booking but is no longer a host.
+            hosts: [{ userId: 102, isFixed: false }],
+            schedulingType: "ROUND_ROBIN",
+          },
+        ],
+        users: [
+          {
+            ...TestData.users.example,
+            email: "example@example.com",
+            id: 101,
+            schedules: [TestData.schedules.IstEveningShift],
+            defaultScheduleId: 1,
+            teams: [team],
+          },
+          {
+            ...TestData.users.example,
+            email: "example1@example.com",
+            id: 102,
+            schedules: [TestData.schedules.IstMorningShift],
+            defaultScheduleId: 2,
+            teams: [team],
+          },
+        ],
+        bookings: [
+          {
+            uid: "BOOKING_TO_RESCHEDULE_UID",
+            userId: 101,
+            attendees: [
+              {
+                email: "IntegrationTestUser102@example.com",
+              },
+            ],
+            eventTypeId: 1,
+            status: "ACCEPTED",
+            startTime: `${plus2DateString}T04:00:00.000Z`,
+            endTime: `${plus2DateString}T04:15:00.000Z`,
+          },
+        ],
+      });
+
+      const schedule = await availableSlotsService.getAvailableSlots({
+        input: {
+          eventTypeId: 1,
+          eventTypeSlug: "",
+          startTime: `${plus1DateString}T18:30:00.000Z`,
+          endTime: `${plus2DateString}T18:29:59.999Z`,
+          timeZone: Timezones["+5:30"],
+          isTeamEvent: true,
+          rescheduleUid: "BOOKING_TO_RESCHEDULE_UID",
+        },
+      });
+
+      // 101's IstEveningShift, not 102's morning — the only host left in the pool.
+      expect(schedule).toHaveTimeSlots(
+        [`11:30:00.000Z`, `12:30:00.000Z`, `13:30:00.000Z`, `14:30:00.000Z`, `15:30:00.000Z`],
+        {
+          dateString: plus2DateString,
+        }
+      );
+    });
+
+    test("Reschedule: should keep showing the original host's timeslots even with routedTeamMemberIds", async () => {
+      // Upstream treats rescheduleUid + routedTeamMemberIds as rerouting and
+      // shows the routed member's slots. This fork uses routedTeamMemberIds for
+      // same-state preference on a URL the client holds, so it cannot move a
+      // pairing.
       vi.setSystemTime("2024-05-21T00:00:13Z");
 
       const plus1DateString = "2024-05-22";
@@ -3635,9 +3707,9 @@ describe("getSchedule", () => {
         },
       });
 
-      // expect only slots of IstEveningShift as this is the slots for the original host of the booking
+      // Only the original host's (101, IstEveningShift) slots, despite routing to 102.
       expect(schedule).toHaveTimeSlots(
-        expectedSlotsForSchedule.IstMorningShift.interval["1hr"].allPossibleSlotsStartingAt430,
+        [`11:30:00.000Z`, `12:30:00.000Z`, `13:30:00.000Z`, `14:30:00.000Z`, `15:30:00.000Z`],
         {
           dateString: plus2DateString,
         }
