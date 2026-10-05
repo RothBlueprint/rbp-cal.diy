@@ -19,6 +19,8 @@ export type useScheduleForEventReturnType = ReturnType<typeof useScheduleForEven
  * advisor in another zone can otherwise surface a 4:00am start. This runs on
  * the schedule data itself, so the day strip, the slot list and the
  * availability checks all agree, and a day left with no times drops out.
+ * If no day keeps a time, the times are shown unfiltered: an odd hour beats
+ * an empty calendar.
  */
 const RBP_FIRST_HOUR = 8;
 const RBP_LAST_HOUR = 20;
@@ -34,6 +36,7 @@ export function rbpWithinLeadHours<D>(data: D, timezone: string | null | undefin
     });
     if (inHours.length) kept[date] = inHours;
   }
+  if (!Object.keys(kept).length) return data;
   return { ...data, slots: kept };
 }
 
