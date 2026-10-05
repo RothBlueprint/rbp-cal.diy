@@ -6652,6 +6652,111 @@
         "tags": ["Users / Admin"]
       }
     },
+    "/v2/users/{userId}/event-types/{eventTypeId}": {
+      "patch": {
+        "operationId": "UsersAdminController_updateUserEventType",
+        "summary": "Update a user's personal event type (admin only)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "eventTypeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEventTypeInput_2024_06_14"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/webhooks": {
+      "post": {
+        "operationId": "UsersAdminController_upsertUserWebhook",
+        "summary": "Create or refresh a webhook on a user's personal event type (admin only)",
+        "description": "Writes an EVENT-TYPE-scoped webhook (userId and teamId stay NULL) for an event type owned by {userId}. Idempotent on (eventTypeId, subscriberUrl): a repeat call refreshes triggers/active in place — and secret/payloadTemplate when supplied — rather than adding a second subscriber, so it is safe to call on every provisioning run. Returns 200 for both create and refresh. The event type must be personal; a team event type is rejected, since team-scoped delivery never fires in this fork.",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertUserWebhookInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventTypeWebhookOutputResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
     "/v2/users/{userId}/conferencing": {
       "get": {
         "operationId": "UsersAdminController_getUserConferencingApps",
@@ -6962,6 +7067,54 @@
             "required": true,
             "in": "query",
             "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Users / Admin"]
+      }
+    },
+    "/v2/users/{userId}/calendars/{calendar}/disconnect": {
+      "delete": {
+        "operationId": "UsersAdminController_disconnectUserCalendar",
+        "summary": "Disconnect a user's calendar (admin only)",
+        "description": "Deletes the named user's calendar credential. Unlike the user-scoped POST /v2/calendars/{calendar}/disconnect — which resolves the credential against the API key OWNER and therefore 404s whenever an admin key disconnects somebody else's calendar — this scopes the lookup to the {userId} path param. For google it also revokes the OAuth grant at Google before deleting the row, so the app stops being listed at myaccount.google.com/permissions.",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "value must be `Bearer <token>` where `<token>` is api key prefixed with cal_",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "calendar",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": ["google", "office365"],
               "type": "string"
             }
           }
@@ -9988,6 +10141,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/InputAttendeeDefinedLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputOrganizersDefaultApp_2024_06_14"
                 }
               ]
             }
@@ -12103,6 +12259,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/InputAttendeeDefinedLocation_2024_06_14"
+                },
+                {
+                  "$ref": "#/components/schemas/InputOrganizersDefaultApp_2024_06_14"
                 }
               ]
             }
@@ -16480,7 +16639,7 @@
             "type": "number"
           },
           "id": {
-            "type": "number"
+            "type": "string"
           },
           "subscriberUrl": {
             "type": "string"
@@ -16626,7 +16785,7 @@
             "type": "number"
           },
           "id": {
-            "type": "number"
+            "type": "string"
           },
           "subscriberUrl": {
             "type": "string"
@@ -16724,7 +16883,7 @@
             "type": "string"
           },
           "id": {
-            "type": "number"
+            "type": "string"
           },
           "subscriberUrl": {
             "type": "string"
@@ -17973,6 +18132,62 @@
           }
         },
         "required": ["status", "data"]
+      },
+      "UpsertUserWebhookInputDto": {
+        "type": "object",
+        "properties": {
+          "eventTypeId": {
+            "type": "number",
+            "description": "Event type to scope the webhook to. Must be a PERSONAL event type owned by {userId} — team event types are rejected, because in this fork team-scoped delivery never fires (see UPSTREAM-BUGS.md #1).",
+            "example": 7
+          },
+          "subscriberUrl": {
+            "type": "string",
+            "example": "https://rothblueprint.com/leads/cal_webhook"
+          },
+          "eventTriggers": {
+            "type": "array",
+            "example": ["BOOKING_CREATED", "BOOKING_CANCELLED", "BOOKING_RESCHEDULED", "BOOKING_REJECTED"],
+            "items": {
+              "type": "string",
+              "enum": [
+                "BOOKING_CREATED",
+                "BOOKING_PAYMENT_INITIATED",
+                "BOOKING_PAID",
+                "BOOKING_RESCHEDULED",
+                "BOOKING_REQUESTED",
+                "BOOKING_CANCELLED",
+                "BOOKING_REJECTED",
+                "BOOKING_NO_SHOW_UPDATED",
+                "FORM_SUBMITTED",
+                "MEETING_ENDED",
+                "MEETING_STARTED",
+                "RECORDING_READY",
+                "RECORDING_TRANSCRIPTION_GENERATED",
+                "OOO_CREATED",
+                "AFTER_HOSTS_CAL_VIDEO_NO_SHOW",
+                "AFTER_GUESTS_CAL_VIDEO_NO_SHOW",
+                "FORM_SUBMITTED_NO_EVENT",
+                "DELEGATION_CREDENTIAL_ERROR",
+                "WRONG_ASSIGNMENT_REPORT"
+              ]
+            }
+          },
+          "secret": {
+            "type": "string",
+            "description": "Shared secret for the X-Cal-Signature-256 HMAC. Omit to leave an existing webhook's secret untouched; on first creation, omitting it means the delivery is unsigned."
+          },
+          "active": {
+            "type": "boolean",
+            "description": "Defaults to true, so a re-run reactivates a webhook someone had disabled.",
+            "default": true
+          },
+          "payloadTemplate": {
+            "type": "string",
+            "description": "Overrides the delivered body. Leave unset unless you know the receiver wants a custom shape — the default is the versioned payload built by BookingPayloadBuilder. Omit to leave an existing webhook's template untouched."
+          }
+        },
+        "required": ["eventTypeId", "subscriberUrl", "eventTriggers"]
       },
       "CalendarConnectionItem": {
         "type": "object",
