@@ -83,17 +83,17 @@ const Day = ({
     <button
       type="button"
       style={disabled ? { ...disabledDateButtonEmbedStyles } : { ...enabledDateButtonEmbedStyles }}
+      // rbp: a 44px circle, not a cell-filling tile. Open days are plain numbers
+      // marked with a brand dot, so a month of openings no longer reads as a
+      // checkerboard; the selected day is the only filled shape.
       className={classNames(
-        "disabled:text-bookinglighter absolute bottom-0 left-0 right-0 top-0 mx-auto w-full cursor-pointer rounded-md border-2 border-transparent text-center text-sm font-medium transition disabled:cursor-default disabled:border-transparent disabled:font-light ",
+        "relative mx-auto flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border text-center text-[15px] transition disabled:cursor-default",
+        date.isToday() && !active ? "border-emphasis" : "border-transparent",
         active
-          ? "bg-brand-default text-brand"
+          ? "bg-brand-default text-brand font-semibold"
           : !disabled
-            ? `${
-                !customClassName?.dayActive
-                  ? "hover:border-brand-default text-emphasis bg-emphasis"
-                  : `hover:border-brand-default ${customClassName.dayActive}`
-              }`
-            : `${customClassName ? "" : " text-mute"}`
+            ? `hover:border-brand-default text-emphasis font-medium ${customClassName?.dayActive ?? ""}`
+            : "text-muted font-normal"
       )}
       data-testid="day"
       data-disabled={disabled}
@@ -101,15 +101,13 @@ const Day = ({
       {...props}>
       {away && <span data-testid="away-emoji">{emoji}</span>}
       {!away && date.date()}
-      {date.isToday() && (
+      {!disabled && !active && !away && (
         <span
-          className={classNames(
-            "bg-brand-default absolute left-1/2 top-1/2 flex h-[5px] w-[5px] -translate-x-1/2 translate-y-[8px] items-center justify-center rounded-full align-middle sm:translate-y-[12px]",
-            active && "bg-brand-accent"
-          )}>
-          <span className="sr-only">{t("today")}</span>
-        </span>
+          aria-hidden="true"
+          className="bg-brand-default absolute bottom-[6px] left-1/2 h-1 w-1 -translate-x-1/2 rounded-full"
+        />
       )}
+      {date.isToday() && <span className="sr-only">{t("today")}</span>}
     </button>
   );
 
@@ -316,12 +314,14 @@ const Days = ({
   return (
     <>
       {daysToRenderForTheMonth.map(({ day, disabled, away, emoji, isFirstDayOfNextMonth }, idx) => (
-        <div key={day === null ? `e-${idx}` : `day-${day.format()}`} className="relative w-full pt-[100%]">
+        <div
+          key={day === null ? `e-${idx}` : `day-${day.format()}`}
+          className="relative flex h-12 w-full items-center justify-center">
           {day === null ? (
             <div key={`e-${idx}`} />
           ) : props.isLoading ? (
             <button
-              className="bg-cal-muted text-muted absolute bottom-0 left-0 right-0 top-0 mx-auto flex w-full items-center justify-center rounded-sm border-transparent text-center font-medium opacity-90 transition"
+              className="bg-cal-muted text-muted mx-auto flex h-11 w-11 items-center justify-center rounded-full border-transparent text-center font-medium opacity-90 transition"
               key={`e-${idx}`}
               disabled>
               <SkeletonText className="h-8 w-9" />
@@ -422,7 +422,7 @@ const DatePicker = ({
                 className={classNames(`text-emphasis font-semibold`, customClassNames?.datePickerTitle)}>
                 {month}
               </strong>{" "}
-              <span className={classNames(`text-subtle font-medium`, customClassNames?.datePickerTitle)}>
+              <span className={classNames(`text-emphasis font-semibold`, customClassNames?.datePickerTitle)}>
                 {browsingDate.format("YYYY")}
               </span>
             </time>
@@ -434,9 +434,8 @@ const DatePicker = ({
           <div className="flex">
             <Button
               className={classNames(
-                `group p-1 opacity-70 transition hover:opacity-100 rtl:rotate-180`,
-                !browsingDate.isAfter(dayjs()) &&
-                  `disabled:text-bookinglighter hover:bg-background hover:opacity-70`,
+                `border-subtle group h-11 w-11 justify-center rounded-[10px] border transition rtl:rotate-180`,
+                !browsingDate.isAfter(dayjs()) && `disabled:text-muted disabled:border-muted`,
                 customClassNames?.datePickerToggle
               )}
               onClick={() => changeMonth(-1)}
@@ -449,7 +448,7 @@ const DatePicker = ({
             />
             <Button
               className={classNames(
-                `group p-1 opacity-70 transition hover:opacity-100 rtl:rotate-180`,
+                `border-subtle group ml-2 h-11 w-11 justify-center rounded-[10px] border transition rtl:rotate-180`,
                 `${customClassNames?.datePickerToggle}`
               )}
               onClick={() => changeMonth(+1)}
@@ -462,12 +461,12 @@ const DatePicker = ({
           </div>
         </div>
       </div>
-      <div className="border-subtle mb-2 grid grid-cols-7 gap-4 border-b border-t text-center md:mb-0 md:border-0">
+      <div className="mb-1 grid grid-cols-7 gap-1 text-center">
         {weekdayNames(locale, weekStart, "short").map((weekDay) => (
           <div
             key={weekDay}
             className={classNames(
-              `text-emphasis my-4 text-xs font-medium uppercase tracking-widest`,
+              `text-subtle my-3 text-xs font-normal`,
               customClassNames?.datePickerDays
             )}>
             {weekDay}

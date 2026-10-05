@@ -149,7 +149,9 @@ const SlotItem = ({
   const isTimeslotUnavailable = unavailableTimeSlots.includes(slot.time);
   return (
     <AnimatePresence>
-      <div className="flex gap-2">
+      {/* rbp: slots sit in a grid (see AvailableTimes). A slot showing its confirm
+          button takes the whole row so the time and the button both fit. */}
+      <div className={classNames("flex gap-2", slot.showConfirmButton && "col-span-full")}>
         <Button
           key={slot.time}
           disabled={
@@ -166,7 +168,7 @@ const SlotItem = ({
           data-time={slot.time}
           onClick={onButtonClick}
           className={classNames(
-            `hover:border-brand-default min-h-9 mb-2 flex h-auto w-full grow flex-col justify-center py-2`,
+            `hover:border-brand-default min-h-11 flex h-auto w-full grow flex-col justify-center rounded-[10px] py-2 text-[15px]`,
             selectedSlots?.includes(slot.time) && "border-brand-default",
             `${customClassNames}`
           )}
@@ -262,6 +264,7 @@ export const AvailableTimes = ({
   ...props
 }: AvailableTimesProps) => {
   const { t } = useLocale();
+  const { timezone } = useBookerTime();
 
   const oooAllDay = slots.every((slot) => slot.away);
   if (oooAllDay) {
@@ -286,15 +289,43 @@ export const AvailableTimes = ({
           </div>
         )}
         {oooBeforeSlots && !oooAfterSlots && <OOOSlot {...slots[0]} />}
-        {slots.map((slot) => {
-          if (slot.away) return null;
-          return <SlotItem key={slot.time} slot={slot} {...props} />;
-        })}
+        {/* rbp: a compact grid under Morning / Afternoon / Evening, not one long
+            column of full-width buttons. Grouped by the hour in the booker's
+            time zone, the same zone the labels are printed in. */}
+        {groupSlotsByPartOfDay(
+          slots.filter((slot) => !slot.away),
+          timezone
+        ).map((group) => (
+          <section key={group.label} className="mb-4 last:mb-0" aria-label={group.label}>
+            <h4 className="text-subtle mb-2 text-xs font-medium uppercase tracking-wide">{group.label}</h4>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(max(84px,calc((100%_-_24px)/4)),1fr))] gap-2">
+              {group.slots.map((slot) => (
+                <SlotItem key={slot.time} slot={slot} {...props} />
+              ))}
+            </div>
+          </section>
+        ))}
         {oooAfterSlots && !oooBeforeSlots && <OOOSlot {...slots[slots.length - 1]} className="pb-0" />}
       </div>
     </div>
   );
 };
+
+const PARTS_OF_DAY = [
+  { label: "Morning", before: 12 },
+  { label: "Afternoon", before: 17 },
+  { label: "Evening", before: 24 },
+];
+
+function groupSlotsByPartOfDay(slots: Slots[string], timezone: string) {
+  const groups = PARTS_OF_DAY.map((part) => ({ label: part.label, slots: [] as Slots[string] }));
+  for (const slot of slots) {
+    const hour = dayjs.utc(slot.time).tz(timezone).hour();
+    const index = PARTS_OF_DAY.findIndex((part) => hour < part.before);
+    groups[index].slots.push(slot);
+  }
+  return groups.filter((group) => group.slots.length > 0);
+}
 
 interface IOOOSlotProps {
   fromUser?: IOutOfOfficeData["anyDate"]["fromUser"];
