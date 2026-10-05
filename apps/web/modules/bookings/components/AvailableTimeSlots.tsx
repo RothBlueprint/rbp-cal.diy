@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import dayjs from "@calcom/dayjs";
 import {
@@ -19,6 +19,8 @@ import classNames from "@calcom/ui/classNames";
 import { AvailableTimesHeader } from "@calcom/web/modules/bookings/components/AvailableTimesHeader";
 import type { useScheduleForEventReturnType } from "@calcom/web/modules/schedules/hooks/useEvent";
 import { getQueryParam } from "@calcom/features/bookings/Booker/utils/query-param";
+import { useBookerTime } from "@calcom/features/bookings/Booker/hooks/useBookerTime";
+import { Button } from "@calcom/ui/components/button";
 
 type AvailableTimeSlotsProps = {
   extraDays?: number;
@@ -88,6 +90,10 @@ export const AvailableTimeSlots = ({
   const [layout] = useBookerStoreContext((state) => [state.layout]);
   const isColumnView = layout === BookerLayouts.COLUMN_VIEW;
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // rbp: picking a time only selects it; the pinned Set appointment bar below the
+  // times books it. Cleared when the day changes so a stale pick is never booked.
+  const [pendingSlot, setPendingSlot] = useState<Slot | null>(null);
+  useEffect(() => setPendingSlot(null), [selectedDate]);
   const { setTentativeSelectedTimeslots, tentativeSelectedTimeslots } = useBookerStoreContext((state) => ({
     setTentativeSelectedTimeslots: state.setTentativeSelectedTimeslots,
     tentativeSelectedTimeslots: state.tentativeSelectedTimeslots,
@@ -177,6 +183,8 @@ export const AvailableTimeSlots = ({
     (selectedSlot: Slot, isOverlapping: boolean) => {
       if ((overlayCalendarToggled && isOverlapping) || skipConfirmStep) {
         toggleConfirmButton(selectedSlot);
+      } else if (!isColumnView) {
+        setPendingSlot(selectedSlot);
       } else {
         onTimeSelect(
           selectedSlot.time,
@@ -186,7 +194,7 @@ export const AvailableTimeSlots = ({
         );
       }
     },
-    [overlayCalendarToggled, onTimeSelect, seatsPerTimeSlot, skipConfirmStep, toggleConfirmButton]
+    [overlayCalendarToggled, onTimeSelect, seatsPerTimeSlot, skipConfirmStep, toggleConfirmButton, isColumnView]
   );
 
   return (
@@ -253,10 +261,67 @@ export const AvailableTimeSlots = ({
                 confirmButtonDisabled={confirmButtonDisabled}
                 confirmStepClassNames={confirmStepClassNames}
                 {...props}
+                selectedSlots={pendingSlot ? [pendingSlot.time] : undefined}
               />
             </div>
           ))}
       </div>
+      {!isColumnView && !isLoading && slotsPerDay.length > 0 && (
+        <SetAppointmentBar
+          slot={pendingSlot}
+          onBook={() =>
+            pendingSlot &&
+            onTimeSelect(
+              pendingSlot.time,
+              pendingSlot.attendees || 0,
+              seatsPerTimeSlot,
+              pendingSlot.bookingUid
+            )
+          }
+        />
+      )}
     </>
+  );
+};
+
+/** "Central Time" for America/Chicago; the zone id itself if Intl cannot name it. */
+function zoneName(timezone: string) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, timeZoneName: "longGeneric" }).formatToParts(
+      new Date()
+    );
+    return parts.find((part) => part.type === "timeZoneName")?.value ?? timezone;
+  } catch {
+    return timezone;
+  }
+}
+
+/**
+ * rbp: the booking action, always on screen under the times (sticky inside any
+ * scrolling ancestor). Says which time zone the times are in, since leads book
+ * in their state's zone (passed as cal.tz), not necessarily their browser's.
+ * Copy is English only: every lead on this instance is in the US.
+ */
+const SetAppointmentBar = ({ slot, onBook }: { slot: Slot | null; onBook: () => void }) => {
+  const { timezone, timeFormat } = useBookerTime();
+  const picked = slot ? dayjs.utc(slot.time).tz(timezone).format(`ddd, MMM D · ${timeFormat}`) : null;
+  return (
+    <div className="bg-default border-subtle sticky bottom-0 z-10 mb-2 mt-4 flex flex-col gap-3 rounded-xl border p-3 shadow-[0_-12px_24px_-14px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)]">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
+        <span className={classNames("font-semibold", picked ? "text-emphasis" : "text-subtle")}>
+          {picked ?? "Pick a time"}
+        </span>
+        <span className="text-subtle text-xs">Times in {zoneName(timezone)}</span>
+      </div>
+      <Button
+        type="button"
+        color="primary"
+        disabled={!slot}
+        onClick={onBook}
+        data-testid="set-appointment"
+        className="h-12 w-full justify-center rounded-[11px] text-[15px] font-semibold enabled:shadow-[0_8px_18px_-6px_color-mix(in_srgb,var(--cal-brand)_55%,transparent),inset_0_1px_0_rgba(255,255,255,0.25)]">
+        Set appointment
+      </Button>
+    </div>
   );
 };

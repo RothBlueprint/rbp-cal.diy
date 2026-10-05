@@ -90,7 +90,7 @@ const Day = ({
         "relative mx-auto flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border text-center text-[15px] transition disabled:cursor-default",
         date.isToday() && !active ? "border-emphasis" : "border-transparent",
         active
-          ? "bg-brand-default text-brand font-semibold"
+          ? "bg-brand-default text-brand font-semibold shadow-[0_0_0_4px_color-mix(in_srgb,var(--cal-brand)_16%,transparent),0_6px_14px_-4px_color-mix(in_srgb,var(--cal-brand)_50%,transparent)]"
           : !disabled
             ? `hover:border-brand-default text-emphasis font-medium ${customClassName?.dayActive ?? ""}`
             : "text-muted font-normal"

@@ -17,7 +17,7 @@ import { SkeletonText } from "@calcom/ui/components/skeleton";
 import { CalendarX2Icon } from "@coss/ui/icons";
 import * as HoverCard from "@radix-ui/react-hover-card";
 import { AnimatePresence, m } from "framer-motion";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { Slot } from "~/schedules/lib/types";
 import type { IUseBookingLoadingStates } from "../hooks/useBookings";
 import { OutOfOfficeInSlots } from "./OutOfOfficeInSlots";
@@ -169,7 +169,9 @@ const SlotItem = ({
           onClick={onButtonClick}
           className={classNames(
             `hover:border-brand-default min-h-11 flex h-auto w-full grow flex-col justify-center rounded-[10px] py-2 text-[15px]`,
-            selectedSlots?.includes(slot.time) && "border-brand-default",
+            selectedSlots?.includes(slot.time)
+              ? "border-brand-default font-semibold shadow-[0_0_0_3px_color-mix(in_srgb,var(--cal-brand)_18%,transparent)]"
+              : "shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_1px_2px_rgba(0,0,0,0.3)]",
             `${customClassNames}`
           )}
           color="secondary">
@@ -265,6 +267,7 @@ export const AvailableTimes = ({
 }: AvailableTimesProps) => {
   const { t } = useLocale();
   const { timezone } = useBookerTime();
+  const [part, setPart] = useState<string | null>(null);
 
   const oooAllDay = slots.every((slot) => slot.away);
   if (oooAllDay) {
@@ -289,22 +292,53 @@ export const AvailableTimes = ({
           </div>
         )}
         {oooBeforeSlots && !oooAfterSlots && <OOOSlot {...slots[0]} />}
-        {/* rbp: a compact grid under Morning / Afternoon / Evening, not one long
-            column of full-width buttons. Grouped by the hour in the booker's
-            time zone, the same zone the labels are printed in. */}
-        {groupSlotsByPartOfDay(
-          slots.filter((slot) => !slot.away),
-          timezone
-        ).map((group) => (
-          <section key={group.label} className="mb-4 last:mb-0" aria-label={group.label}>
-            <h4 className="text-subtle mb-2 text-xs font-medium uppercase tracking-wide">{group.label}</h4>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(max(84px,calc((100%_-_24px)/4)),1fr))] gap-2">
-              {group.slots.map((slot) => (
-                <SlotItem key={slot.time} slot={slot} {...props} />
-              ))}
-            </div>
-          </section>
-        ))}
+        {/* rbp: Morning / Afternoon / Evening tabs over a compact grid, so one short
+            block shows at a time instead of a day's worth of buttons. Grouped by
+            the hour in the booker's time zone, the zone the labels print in. */}
+        {(() => {
+          const groups = groupSlotsByPartOfDay(
+            slots.filter((slot) => !slot.away),
+            timezone
+          );
+          if (!groups.length) return null;
+          const current = groups.find((group) => group.label === part) ?? groups[0];
+          return (
+            <>
+              <div
+                role="tablist"
+                aria-label="Part of day"
+                className="bg-muted border-subtle mb-3 inline-flex gap-0.5 rounded-[10px] border p-[3px] shadow-[inset_0_1px_3px_rgba(0,0,0,0.3)]">
+                {groups.map((group) => {
+                  const selected = group.label === current.label;
+                  return (
+                    <button
+                      key={group.label}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => setPart(group.label)}
+                      className={classNames(
+                        "h-8 rounded-lg px-3 text-[13px] font-medium transition-colors",
+                        selected
+                          ? "bg-default text-emphasis shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_1px_3px_rgba(0,0,0,0.35)]"
+                          : "text-subtle hover:text-emphasis"
+                      )}>
+                      {group.label} <span className="text-muted font-normal">{group.slots.length}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div
+                role="tabpanel"
+                aria-label={current.label}
+                className="grid grid-cols-[repeat(auto-fill,minmax(max(84px,calc((100%_-_24px)/4)),1fr))] gap-2">
+                {current.slots.map((slot) => (
+                  <SlotItem key={slot.time} slot={slot} {...props} />
+                ))}
+              </div>
+            </>
+          );
+        })()}
         {oooAfterSlots && !oooBeforeSlots && <OOOSlot {...slots[slots.length - 1]} className="pb-0" />}
       </div>
     </div>
