@@ -92,7 +92,7 @@ const Day = ({
         active
           ? "bg-brand-default text-brand font-semibold shadow-[0_0_0_4px_color-mix(in_srgb,var(--cal-brand)_16%,transparent),0_6px_14px_-4px_color-mix(in_srgb,var(--cal-brand)_50%,transparent)]"
           : !disabled
-            ? `hover:border-brand-default text-emphasis font-medium ${customClassName?.dayActive ?? ""}`
+            ? `hover:border-brand-default text-emphasis font-medium hover:bg-[color-mix(in_srgb,var(--cal-brand)_10%,transparent)] ${customClassName?.dayActive ?? ""}`
             : "text-muted font-normal"
       )}
       data-testid="day"
@@ -473,7 +473,9 @@ const DatePicker = ({
           </div>
         ))}
       </div>
-      <div className="relative grid grid-cols-7 grid-rows-6 gap-1 text-center">
+      {/* rbp: rows only for the weeks this month has. A fixed six left an empty
+          row (and its gap) between a five-week month and the times below. */}
+      <div className="relative grid grid-cols-7 gap-1 text-center">
         <Days
           customClassName={{
             datePickerDate: customClassNames?.datePickersDates,

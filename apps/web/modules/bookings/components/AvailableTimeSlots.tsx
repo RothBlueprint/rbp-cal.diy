@@ -306,7 +306,8 @@ const SetAppointmentBar = ({ slot, onBook }: { slot: Slot | null; onBook: () => 
   const { timezone, timeFormat } = useBookerTime();
   const picked = slot ? dayjs.utc(slot.time).tz(timezone).format(`ddd, MMM D · ${timeFormat}`) : null;
   return (
-    <div className="bg-default border-subtle sticky bottom-0 z-10 mb-2 mt-4 flex flex-col gap-3 rounded-xl border p-3 shadow-[0_-12px_24px_-14px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)]">
+    // A floating sheet: elevation from shadow and a hairline ring, not a border.
+    <div className="bg-default sticky bottom-0 z-10 mb-3 mt-5 flex flex-col gap-3 rounded-2xl bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0)_60%)] p-3.5 ring-1 ring-black/5 backdrop-blur-md shadow-[0_1px_2px_rgba(60,45,20,0.10),0_16px_32px_-16px_rgba(60,45,20,0.40)] dark:ring-white/[0.06] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_2px_6px_rgba(0,0,0,0.4),0_22px_44px_-18px_rgba(0,0,0,0.85)]">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
         <span className={classNames("font-semibold", picked ? "text-emphasis" : "text-subtle")}>
           {picked ?? "Pick a time"}

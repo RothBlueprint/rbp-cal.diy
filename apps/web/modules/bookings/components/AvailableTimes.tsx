@@ -168,10 +168,12 @@ const SlotItem = ({
           data-time={slot.time}
           onClick={onButtonClick}
           className={classNames(
-            `hover:border-brand-default min-h-11 flex h-auto w-full grow flex-col justify-center rounded-[10px] py-2 text-[15px]`,
+            // rbp: raised "keys" (top highlight, near and far shadow) that lift on
+            // hover and press in on click; the picked one sits tinted and ringed.
+            `hover:border-brand-default min-h-11 flex h-auto w-full grow flex-col justify-center rounded-[10px] py-2 text-[15px] transition-[transform,box-shadow,border-color,background-color] duration-150 not-disabled:active:translate-y-0 not-disabled:active:scale-[0.96]`,
             selectedSlots?.includes(slot.time)
-              ? "border-brand-default font-semibold shadow-[0_0_0_3px_color-mix(in_srgb,var(--cal-brand)_18%,transparent)]"
-              : "shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_1px_2px_rgba(0,0,0,0.3)]",
+              ? "border-brand-default font-semibold bg-[linear-gradient(0deg,color-mix(in_srgb,var(--cal-brand)_16%,transparent),color-mix(in_srgb,var(--cal-brand)_16%,transparent))] shadow-[inset_0_1px_2px_rgba(0,0,0,0.22),0_0_0_3px_color-mix(in_srgb,var(--cal-brand)_20%,transparent)] not-disabled:hover:shadow-[inset_0_1px_2px_rgba(0,0,0,0.22),0_0_0_3px_color-mix(in_srgb,var(--cal-brand)_20%,transparent)] dark:not-disabled:hover:shadow-[inset_0_1px_2px_rgba(0,0,0,0.22),0_0_0_3px_color-mix(in_srgb,var(--cal-brand)_20%,transparent)]"
+              : "bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0)_75%)] border-subtle shadow-[0_1px_1px_rgba(60,45,20,0.06),0_6px_12px_-8px_rgba(60,45,20,0.30)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_1px_1px_rgba(0,0,0,0.4),0_8px_14px_-8px_rgba(0,0,0,0.65)] not-disabled:hover:-translate-y-px not-disabled:hover:shadow-[0_2px_3px_rgba(60,45,20,0.08),0_10px_18px_-10px_rgba(60,45,20,0.4)] dark:not-disabled:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.09),0_2px_3px_rgba(0,0,0,0.45),0_12px_20px_-10px_rgba(0,0,0,0.75)]",
             `${customClassNames}`
           )}
           color="secondary">
@@ -307,7 +309,7 @@ export const AvailableTimes = ({
               <div
                 role="tablist"
                 aria-label="Part of day"
-                className="bg-muted border-subtle mb-3 inline-flex gap-0.5 rounded-[10px] border p-[3px] shadow-[inset_0_1px_3px_rgba(0,0,0,0.3)]">
+                className="bg-muted border-subtle mb-3 inline-flex gap-0.5 rounded-[11px] border p-[3px] shadow-[inset_0_1px_3px_rgba(60,45,20,0.12)] dark:shadow-[inset_0_1px_3px_rgba(0,0,0,0.45)]">
                 {groups.map((group) => {
                   const selected = group.label === current.label;
                   return (
@@ -320,7 +322,7 @@ export const AvailableTimes = ({
                       className={classNames(
                         "h-8 rounded-lg px-3 text-[13px] font-medium transition-colors",
                         selected
-                          ? "bg-default text-emphasis shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_1px_3px_rgba(0,0,0,0.35)]"
+                          ? "bg-default text-emphasis bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0))] shadow-[0_1px_2px_rgba(60,45,20,0.12)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_1px_3px_rgba(0,0,0,0.45)]"
                           : "text-subtle hover:text-emphasis"
                       )}>
                       {group.label} <span className="text-muted font-normal">{group.slots.length}</span>
