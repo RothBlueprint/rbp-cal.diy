@@ -10,6 +10,7 @@ import { handleDeleteCredential } from "@calcom/platform-libraries/app-store";
 import type {
   CreateEventTypeInput_2024_06_14,
   GetBookingsInput_2024_08_13,
+  UpdateEventTypeInput_2024_06_14,
   UpdateScheduleInput_2024_06_11,
 } from "@calcom/platform-types";
 import { CreationSource } from "@calcom/prisma/client";
@@ -283,6 +284,31 @@ export class UsersAdminService {
     );
 
     return await this.eventTypesService.createUserEventType(user, transformed);
+  }
+
+  async updateUserEventType(userId: number, eventTypeId: number, body: UpdateEventTypeInput_2024_06_14) {
+    const user = await this.usersRepository.findByIdWithProfile(userId);
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+
+    // As with create: validate and authorise against the TARGET user. updateEventType
+    // checks that this user owns the event type, so a team or another agent's event
+    // type is refused rather than silently edited.
+    const transformed = await this.inputEventTypesService.transformAndValidateUpdateEventTypeInput(
+      body,
+      user,
+      eventTypeId
+    );
+    const updated = await this.eventTypesService.updateEventType(eventTypeId, transformed, user);
+
+    // Only what a caller needs to confirm the write; the full row carries far more.
+    return {
+      id: updated.id,
+      periodType: updated.periodType,
+      periodDays: updated.periodDays,
+      periodCountCalendarDays: updated.periodCountCalendarDays,
+    };
   }
 
   // ── Webhooks (admin-on-behalf-of) ─────────────────────────────────────────
