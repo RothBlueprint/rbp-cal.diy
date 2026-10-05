@@ -1,4 +1,7 @@
+import { useMemo } from "react";
 import { shallow } from "zustand/shallow";
+
+import dayjs from "@calcom/dayjs";
 
 import { useBookerStoreContext } from "@calcom/features/bookings/Booker/BookerStoreProvider";
 import { useSchedule } from "@calcom/web/modules/schedules/hooks/useSchedule";
@@ -9,6 +12,30 @@ import { useBookerTime } from "@calcom/features/bookings/Booker/hooks/useBookerT
 
 export type useEventReturnType = ReturnType<typeof useEvent>;
 export type useScheduleForEventReturnType = ReturnType<typeof useScheduleForEvent>;
+
+/**
+ * rbp: leads only see start times from 8:00am up to 8:00pm in the zone the
+ * booker shows (their state's zone, which rbp passes as cal.tz). A pool
+ * advisor in another zone can otherwise surface a 4:00am start. This runs on
+ * the schedule data itself, so the day strip, the slot list and the
+ * availability checks all agree, and a day left with no times drops out.
+ */
+const RBP_FIRST_HOUR = 8;
+const RBP_LAST_HOUR = 20;
+
+export function rbpWithinLeadHours<D>(data: D, timezone: string | null | undefined): D {
+  const slots = (data as { slots?: Record<string, { time: string }[]> } | null | undefined)?.slots;
+  if (!slots || !timezone) return data;
+  const kept: Record<string, { time: string }[]> = {};
+  for (const [date, daySlots] of Object.entries(slots)) {
+    const inHours = daySlots.filter((slot) => {
+      const hour = dayjs.utc(slot.time).tz(timezone).hour();
+      return hour >= RBP_FIRST_HOUR && hour < RBP_LAST_HOUR;
+    });
+    if (inHours.length) kept[date] = inHours;
+  }
+  return { ...data, slots: kept };
+}
 
 /**
  * Wrapper hook around the trpc query that fetches
@@ -119,8 +146,10 @@ export const useScheduleForEvent = ({
     bookerLayout,
   });
 
+  const data = useMemo(() => rbpWithinLeadHours(schedule?.data, timezone), [schedule?.data, timezone]);
+
   return {
-    data: schedule?.data,
+    data,
     isPending: schedule?.isPending,
     isError: schedule?.isError,
     isSuccess: schedule?.isSuccess,

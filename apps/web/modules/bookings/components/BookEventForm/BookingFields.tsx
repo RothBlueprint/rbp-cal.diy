@@ -30,6 +30,7 @@ export const BookingFields = ({
   bookingData,
   isPaidEvent,
   paymentCurrency = "USD",
+  foldedFields,
 }: {
   fields: Fields;
   locations: LocationObject[];
@@ -38,6 +39,8 @@ export const BookingFields = ({
   isDynamicGroupBooking: boolean;
   isPaidEvent?: boolean;
   paymentCurrency?: string;
+  /** rbp: rendered and validated but not shown (BookEventForm's "Booking as" line). */
+  foldedFields?: string[];
 }) => {
   const { t, i18n } = useLocale();
   const { watch, setValue, formState } = useFormContext();
@@ -163,10 +166,25 @@ export const BookingFields = ({
           readOnly = false;
         }
 
+        let rbpLabel: string | undefined;
+        let rbpPlaceholder: string | undefined;
+
         if (field.name === SystemField.Enum.guests) {
           readOnly = false;
           // No matter what user configured for Guests field, we don't show it for dynamic group booking as that doesn't support guests
           hidden = isDynamicGroupBooking ? true : !!field.hidden;
+          // rbp: kept so a spouse can get the video link in their own inbox; named for that.
+          rbpLabel = "Invite your spouse or a guest";
+        }
+
+        if (field.name === SystemField.Enum.notes) {
+          rbpLabel = "Anything we should know beforehand?";
+          rbpPlaceholder = "Optional";
+        }
+
+        if (field.name === SystemField.Enum.rescheduleReason) {
+          rbpLabel = "Why the change?";
+          rbpPlaceholder = "Optional";
         }
 
         // We don't show `notes` field during reschedule but since it's a query param we better valid if rescheduleUid brought any bookingData
@@ -236,9 +254,12 @@ export const BookingFields = ({
           }
         }
 
+        if (rbpLabel) fieldWithPrice = { ...fieldWithPrice, label: rbpLabel, labelAsSafeHtml: undefined };
+        if (rbpPlaceholder) fieldWithPrice = { ...fieldWithPrice, placeholder: rbpPlaceholder };
+
         return (
           <FormBuilderField
-            className="mb-4"
+            className={foldedFields?.includes(field.name) ? "hidden" : "mb-4"}
             field={{ ...fieldWithPrice, hidden }}
             readOnly={readOnly}
             key={index}

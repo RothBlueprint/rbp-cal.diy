@@ -5,20 +5,25 @@ import { useBookerTime } from "@calcom/features/bookings/Booker/hooks/useBookerT
 import type { UseBookingFormReturnType } from "@calcom/features/bookings/Booker/hooks/useBookingForm";
 import { formatEventFromTime } from "@calcom/features/bookings/Booker/utils/dates";
 import type { BookerEvent } from "@calcom/features/bookings/types";
+import dayjs from "@calcom/dayjs";
 import ServerTrans from "@calcom/lib/components/ServerTrans";
-import { APP_NAME, WEBSITE_PRIVACY_POLICY_URL, WEBSITE_TERMS_URL } from "@calcom/lib/constants";
+import { WEBSITE_PRIVACY_POLICY_URL, WEBSITE_TERMS_URL } from "@calcom/lib/constants";
 import { ErrorCode } from "@calcom/lib/errorCodes";
+import { useCompatSearchParams } from "@calcom/lib/hooks/useCompatSearchParams";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import type { TimeFormat } from "@calcom/lib/timeFormat";
+import classNames from "@calcom/ui/classNames";
 import { Alert } from "@calcom/ui/components/alert";
 import { Button } from "@calcom/ui/components/button";
 import { EmptyScreen } from "@calcom/ui/components/empty-screen";
 import { Form } from "@calcom/ui/components/form";
+import { Icon } from "@calcom/ui/components/icon";
 import type { TFunction } from "i18next";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { FieldError } from "react-hook-form";
 import type { IUseBookingErrors, IUseBookingLoadingStates } from "../../hooks/useBookings";
+import { rbpZoneName } from "../../lib/rbpZoneName";
 import { BookingFields } from "./BookingFields";
 import { FormSkeleton } from "./Skeleton";
 
@@ -58,13 +63,13 @@ export const BookEventForm = ({
   isTimeslotUnavailable,
   shouldRenderCaptcha,
   confirmButtonDisabled,
-  classNames,
+  classNames: customClassNames,
   timeslot,
 }: Omit<BookEventFormProps, "event"> & {
   eventQuery: {
     isError: boolean;
     isPending: boolean;
-    data?: Pick<BookerEvent, "price" | "currency" | "metadata" | "bookingFields" | "locations"> | null;
+    data?: Pick<BookerEvent, "price" | "currency" | "metadata" | "bookingFields" | "locations" | "length"> | null;
   };
 }) => {
   const eventType = eventQuery.data;
@@ -74,6 +79,13 @@ export const BookEventForm = ({
   const username = useBookerStoreContext((state) => state.username);
   const isPlatformBookerEmbed = useIsPlatformBookerEmbed();
   const { timeFormat, timezone } = useBookerTime();
+  const selectedDuration = useBookerStoreContext((state) => state.selectedDuration);
+  const searchParams = useCompatSearchParams();
+  // rbp: the funnel already has the lead's name and email (the result page
+  // prefills both), so they fold into one "Booking as" line. The inputs stay
+  // mounted and validated, only not shown; Edit, or a validation error, opens
+  // them.
+  const [identityOpen, setIdentityOpen] = useState(false);
 
   const [responseVercelIdHeader] = useState<string | null>(null);
   const { t, i18n } = useLocale();
@@ -109,6 +121,24 @@ export const BookEventForm = ({
 
   const watchedCfToken = bookingForm.watch("cfToken");
 
+  const isRescheduleView = !!(rescheduleUid && bookingData);
+  const responses = (bookingForm.watch("responses") || {}) as Record<string, unknown>;
+  const nameResponse = responses.name as string | { firstName?: string; lastName?: string } | undefined;
+  const bookingName =
+    typeof nameResponse === "string"
+      ? nameResponse
+      : [nameResponse?.firstName, nameResponse?.lastName].filter(Boolean).join(" ");
+  const bookingEmail = typeof responses.email === "string" ? responses.email : "";
+  const responsesError = bookingForm.formState.errors.responses as
+    | { message?: string; name?: unknown; email?: unknown }
+    | undefined;
+  const identityInvalid =
+    !!responsesError &&
+    (!!responsesError.name || !!responsesError.email || /^\{(name|email)\}/.test(responsesError.message ?? ""));
+  const identityPrefilled = !!(searchParams?.get("name") && searchParams?.get("email"));
+  const identityFolded =
+    identityPrefilled && !!bookingName && !!bookingEmail && !identityOpen && !identityInvalid;
+
   return (
     <div className="flex flex-col h-full">
       <Form
@@ -123,15 +153,60 @@ export const BookEventForm = ({
         form={bookingForm}
         handleSubmit={onSubmit}
         noValidate>
-        <BookingFields
-          isDynamicGroupBooking={!!(username && username.indexOf("+") > -1)}
-          fields={eventType.bookingFields}
-          locations={eventType.locations}
-          rescheduleUid={rescheduleUid || undefined}
-          bookingData={bookingData}
-          isPaidEvent={isPaidEvent}
-          paymentCurrency={paymentCurrency}
+        <AppointmentRecap
+          timeslot={timeslot}
+          duration={selectedDuration || eventType.length}
+          timezone={timezone}
+          timeFormat={timeFormat}
+          heading={isRescheduleView ? "Your new time" : "Your appointment"}
+          onChange={onCancel}
         />
+        {identityFolded && (
+          <div className="mb-5 flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="bg-muted text-emphasis flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold shadow-[inset_0_1px_2px_rgba(60,45,20,0.12)] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)]">
+              {bookingName.trim().charAt(0).toUpperCase()}
+            </span>
+            <div className="min-w-0 flex-1 text-sm leading-snug">
+              <p className="text-subtle">
+                Booking as <span className="text-emphasis font-semibold">{bookingName}</span>
+              </p>
+              <p className="text-subtle truncate">{bookingEmail}</p>
+            </div>
+            {!isRescheduleView && (
+              <button
+                type="button"
+                onClick={() => setIdentityOpen(true)}
+                className="text-emphasis hover:bg-muted -mr-2 shrink-0 rounded-lg px-3 py-2.5 text-sm font-medium underline-offset-4 hover:underline">
+                Edit
+              </button>
+            )}
+          </div>
+        )}
+        {/* rbp: inputs are wells (inset shadow), set against the raised keys of
+            the time picker; 48px tall, brand focus ring. */}
+        <div
+          className={classNames(
+            "[&_label]:text-default [&_label]:text-[13px] [&_label]:font-medium [&_[data-testid=add-guests]]:-ms-3",
+            "[&_input:not([type=checkbox]):not([type=radio])]:h-12 [&_input]:rounded-xl [&_input]:px-3.5 [&_input]:text-[15px]",
+            "[&_textarea]:min-h-[88px] [&_textarea]:rounded-xl [&_textarea]:px-3.5 [&_textarea]:py-3 [&_textarea]:text-[15px] [&_textarea]:leading-normal",
+            "[&_input]:shadow-[inset_0_1px_2px_rgba(60,45,20,0.10)] [&_textarea]:shadow-[inset_0_1px_2px_rgba(60,45,20,0.10)]",
+            "dark:[&_input]:shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)] dark:[&_textarea]:shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)]",
+            "[&_input:focus]:border-brand-default [&_textarea:focus]:border-brand-default",
+            "[&_input:focus]:shadow-[0_0_0_3px_color-mix(in_srgb,var(--cal-brand)_22%,transparent)] [&_textarea:focus]:shadow-[0_0_0_3px_color-mix(in_srgb,var(--cal-brand)_22%,transparent)]"
+          )}>
+          <BookingFields
+            isDynamicGroupBooking={!!(username && username.indexOf("+") > -1)}
+            fields={eventType.bookingFields}
+            locations={eventType.locations}
+            rescheduleUid={rescheduleUid || undefined}
+            bookingData={bookingData}
+            isPaidEvent={isPaidEvent}
+            paymentCurrency={paymentCurrency}
+            foldedFields={identityFolded ? ["name", "email"] : undefined}
+          />
+        </div>
         {errors.hasFormErrors || errors.hasDataErrors ? (
           <div data-testid="booking-fail">
             <Alert
@@ -174,30 +249,23 @@ export const BookEventForm = ({
           </div>
         ) : null}
 
+        {/* rbp: our terms in plain words. The stock line named the app ("Cal.diy"
+            locally) and linked cal.com's terms in production. */}
         {!isPlatform && (
-          <div className="my-3 w-full text-xs text-subtle">
-            <ServerTrans
-              t={t}
-              i18nKey="signing_up_terms"
-              values={{ appName: APP_NAME }}
-              components={[
-                <Link
-                  className="text-emphasis hover:underline"
-                  key="terms"
-                  href={`${WEBSITE_TERMS_URL}`}
-                  target="_blank">
-                  Terms
-                </Link>,
-                <Link
-                  className="text-emphasis hover:underline"
-                  key="privacy"
-                  href={`${WEBSITE_PRIVACY_POLICY_URL}`}
-                  target="_blank">
-                  Privacy Policy.
-                </Link>,
-              ]}
-            />
-          </div>
+          <p className="text-subtle mb-4 mt-1 w-full text-xs">
+            By booking, you agree to our{" "}
+            <Link className="text-emphasis underline-offset-2 hover:underline" href={WEBSITE_TERMS_URL} target="_blank">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link
+              className="text-emphasis underline-offset-2 hover:underline"
+              href={WEBSITE_PRIVACY_POLICY_URL}
+              target="_blank">
+              Privacy Policy
+            </Link>
+            .
+          </p>
         )}
 
         {isPlatformBookerEmbed && (
@@ -221,18 +289,8 @@ export const BookEventForm = ({
             .
           </div>
         )}
-        <div className="flex justify-end mt-auto space-x-2 modalsticky rtl:space-x-reverse">
-          {!!onCancel && (
-            <Button
-              color="minimal"
-              type="button"
-              onClick={onCancel}
-              data-testid="back"
-              className={classNames?.backButton}>
-              {t("back")}
-            </Button>
-          )}
-
+        {/* rbp: one full-width primary. Back is "Change" on the recap above. */}
+        <div className="mt-auto modalsticky">
           <Button
             type="submit"
             color="primary"
@@ -244,19 +302,84 @@ export const BookEventForm = ({
               loadingStates.creatingRecurringBooking ||
               isVerificationCodeSending
             }
-            className={classNames?.confirmButton}
+            className={classNames(
+              "h-12 w-full justify-center rounded-[11px] text-[15px] font-semibold enabled:shadow-[0_8px_18px_-6px_color-mix(in_srgb,var(--cal-brand)_55%,transparent),inset_0_1px_0_rgba(255,255,255,0.25)]",
+              customClassNames?.confirmButton
+            )}
             data-testid={rescheduleUid && bookingData ? "confirm-reschedule-button" : "confirm-book-button"}>
             {rescheduleUid && bookingData
-              ? t("reschedule")
+              ? "Move my appointment"
               : renderConfirmNotVerifyEmailButtonCond
                 ? isPaidEvent
                   ? t("pay_and_book")
-                  : t("confirm")
+                  : "Confirm appointment"
                 : t("verify_email_button")}
           </Button>
         </div>
       </Form>
     </div>
+  );
+};
+
+/**
+ * rbp: the pick, carried onto the form. The event-type details are hidden in
+ * the embed, so without this the form never says which time is being booked.
+ * The date tile repeats the chosen day chip, so the two steps read as one.
+ */
+const AppointmentRecap = ({
+  timeslot,
+  duration,
+  timezone,
+  timeFormat,
+  heading,
+  onChange,
+}: {
+  timeslot: string;
+  duration: number;
+  timezone: string;
+  timeFormat: string;
+  heading: string;
+  onChange?: () => void;
+}) => {
+  const start = dayjs.utc(timeslot).tz(timezone);
+  const end = start.add(duration, "minute");
+  return (
+    <section
+      aria-label={heading}
+      className="bg-default mb-6 rounded-2xl bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0)_60%)] p-4 ring-1 ring-black/5 shadow-[0_1px_2px_rgba(60,45,20,0.10),0_16px_32px_-16px_rgba(60,45,20,0.40)] dark:ring-white/[0.06] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_2px_6px_rgba(0,0,0,0.4),0_22px_44px_-18px_rgba(0,0,0,0.85)]">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <span className="text-subtle text-xs font-medium">{heading}</span>
+        {onChange && (
+          <button
+            type="button"
+            onClick={onChange}
+            data-testid="back"
+            className="text-emphasis hover:bg-muted -my-2 -mr-2 rounded-lg px-3 py-2 text-sm font-medium underline-offset-4 hover:underline">
+            Change
+          </button>
+        )}
+      </div>
+      <div className="flex items-center gap-4">
+        <div
+          aria-hidden="true"
+          className="bg-brand-default text-brand flex min-h-[68px] w-[60px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl tabular-nums shadow-[0_6px_14px_-6px_color-mix(in_srgb,var(--cal-brand)_60%,transparent)]">
+          <span className="text-xs font-medium opacity-80">{start.format("ddd")}</span>
+          <span className="text-xl font-semibold leading-tight">{start.format("D")}</span>
+          <span className="text-[11px] opacity-80">{start.format("MMM")}</span>
+        </div>
+        <div className="min-w-0">
+          <p className="text-emphasis text-base font-semibold">{start.format("dddd, MMMM D")}</p>
+          <p className="text-default mt-0.5 text-sm tabular-nums">
+            {start.format(timeFormat)} to {end.format(timeFormat)}
+          </p>
+          <p className="text-subtle text-sm">{rbpZoneName(timezone)}</p>
+        </div>
+      </div>
+      <p className="text-subtle mt-4 flex items-start gap-2 text-sm">
+        <Icon name="video" className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <span>Video call. The link is in your confirmation email.</span>
+      </p>
+    </section>
   );
 };
 
