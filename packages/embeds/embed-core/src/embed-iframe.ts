@@ -343,6 +343,13 @@ async function waitForRenderStateToBeCompleted() {
 
 // It is a map of methods that can be called by parent using doInIframe({method: "methodName", arg: "argument"})
 export const methods = {
+  /**
+   * rbp: the parent page's own Set appointment bar books the slot picked in
+   * the booker (AvailableTimeSlots listens for this window event).
+   */
+  rbpBookPendingSlot: function rbpBookPendingSlot(_arg?: Record<string, never>) {
+    window.dispatchEvent(new CustomEvent("rbp:book-pending-slot"));
+  },
   ui: function style(uiConfig: UiConfig) {
     // TODO: Create automatic logger for all methods. Useful for debugging.
     log("Method: ui called", uiConfig);

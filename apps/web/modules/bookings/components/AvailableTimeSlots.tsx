@@ -21,6 +21,8 @@ import type { useScheduleForEventReturnType } from "@calcom/web/modules/schedule
 import { getQueryParam } from "@calcom/features/bookings/Booker/utils/query-param";
 import { useBookerTime } from "@calcom/features/bookings/Booker/hooks/useBookerTime";
 import { Button } from "@calcom/ui/components/button";
+import { sdkActionManager } from "@calcom/embed-core/embed-iframe";
+import { rbpZoneName } from "../lib/rbpZoneName";
 
 type AvailableTimeSlotsProps = {
   extraDays?: number;
@@ -94,6 +96,29 @@ export const AvailableTimeSlots = ({
   // times books it. Cleared when the day changes so a stale pick is never booked.
   const [pendingSlot, setPendingSlot] = useState<Slot | null>(null);
   useEffect(() => setPendingSlot(null), [selectedDate]);
+  const { timezone: bookerTimezone, timeFormat: bookerTimeFormat } = useBookerTime();
+
+  // rbp: an embed grows to its content, so nothing in here can stay on the
+  // parent's screen. The parent page draws its own Set appointment bar from
+  // this state while ours is below its fold, and books through
+  // rbpBookPendingSlot (embed-iframe methods), which lands here.
+  useEffect(() => {
+    if (isColumnView) return;
+    sdkActionManager?.fire("rbpSlotState", {
+      active: true,
+      picked: !!pendingSlot,
+      label: pendingSlot
+        ? dayjs.utc(pendingSlot.time).tz(bookerTimezone).format(`ddd, MMM D · ${bookerTimeFormat}`)
+        : null,
+      zone: rbpZoneName(bookerTimezone),
+    });
+  }, [pendingSlot, bookerTimezone, bookerTimeFormat, isColumnView]);
+  useEffect(() => {
+    if (isColumnView) return;
+    return () => {
+      sdkActionManager?.fire("rbpSlotState", { active: false, picked: false, label: null, zone: "" });
+    };
+  }, [isColumnView]);
   const { setTentativeSelectedTimeslots, tentativeSelectedTimeslots } = useBookerStoreContext((state) => ({
     setTentativeSelectedTimeslots: state.setTentativeSelectedTimeslots,
     tentativeSelectedTimeslots: state.tentativeSelectedTimeslots,
@@ -178,6 +203,16 @@ export const AvailableTimeSlots = ({
       onAvailableTimeSlotSelect,
     ]
   );
+
+  useEffect(() => {
+    if (isColumnView) return;
+    const book = () => {
+      if (!pendingSlot) return;
+      onTimeSelect(pendingSlot.time, pendingSlot.attendees || 0, seatsPerTimeSlot, pendingSlot.bookingUid);
+    };
+    window.addEventListener("rbp:book-pending-slot", book);
+    return () => window.removeEventListener("rbp:book-pending-slot", book);
+  }, [pendingSlot, onTimeSelect, seatsPerTimeSlot, isColumnView]);
 
   const handleSlotClick = useCallback(
     (selectedSlot: Slot, isOverlapping: boolean) => {
@@ -284,18 +319,6 @@ export const AvailableTimeSlots = ({
   );
 };
 
-/** "Central Time" for America/Chicago; the zone id itself if Intl cannot name it. */
-function zoneName(timezone: string) {
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, timeZoneName: "longGeneric" }).formatToParts(
-      new Date()
-    );
-    return parts.find((part) => part.type === "timeZoneName")?.value ?? timezone;
-  } catch {
-    return timezone;
-  }
-}
-
 /**
  * rbp: the booking action, always on screen under the times (sticky inside any
  * scrolling ancestor). Says which time zone the times are in, since leads book
@@ -309,10 +332,10 @@ const SetAppointmentBar = ({ slot, onBook }: { slot: Slot | null; onBook: () => 
     // A floating sheet: elevation from shadow and a hairline ring, not a border.
     <div className="bg-default sticky bottom-0 z-10 mb-3 mt-5 flex flex-col gap-3 rounded-2xl bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0)_60%)] p-3.5 ring-1 ring-black/5 backdrop-blur-md shadow-[0_1px_2px_rgba(60,45,20,0.10),0_16px_32px_-16px_rgba(60,45,20,0.40)] dark:ring-white/[0.06] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_2px_6px_rgba(0,0,0,0.4),0_22px_44px_-18px_rgba(0,0,0,0.85)]">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
-        <span className={classNames("font-semibold", picked ? "text-emphasis" : "text-subtle")}>
+        <span aria-live="polite" className={classNames("font-semibold", picked ? "text-emphasis" : "text-subtle")}>
           {picked ?? "Pick a time"}
         </span>
-        <span className="text-subtle text-xs">Times in {zoneName(timezone)}</span>
+        <span className="text-subtle text-xs">Times in {rbpZoneName(timezone)}</span>
       </div>
       <Button
         type="button"

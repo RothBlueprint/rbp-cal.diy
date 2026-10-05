@@ -51,6 +51,12 @@ export type DatePickerProps = {
   isCompact?: boolean;
   // Whether to show the no availability dialog
   showNoAvailabilityDialog?: boolean;
+  /**
+   * rbp: "strip" lists only the bookable days as one row of chips (wrapping on a
+   * phone) instead of a month grid. Leads book at most 7 business days out, so a
+   * month showed 7 live days among 35 cells.
+   */
+  variant?: "month" | "strip";
 };
 
 const Day = ({
@@ -155,6 +161,7 @@ const Days = ({
   periodData,
   isCompact,
   showNoAvailabilityDialog = true,
+  variant = "month",
   ...props
 }: Omit<DatePickerProps, "locale" | "className" | "weekStart"> & {
   DayComponent?: React.FC<React.ComponentProps<typeof Day>>;
@@ -311,6 +318,64 @@ const Days = ({
 
   useEffect(useHandleInitialDateSelection);
 
+  if (variant === "strip") {
+    const bookable = daysToRenderForTheMonth.filter(
+      (entry): entry is typeof entry & { day: Dayjs } => !!entry.day && !entry.disabled
+    );
+    if (props.isLoading) {
+      return (
+        <>
+          {Array.from({ length: 7 }).map((_, idx) => (
+            <div key={`s-${idx}`} className="bg-cal-muted h-[76px] rounded-xl opacity-60" />
+          ))}
+        </>
+      );
+    }
+    return (
+      <>
+        {bookable.map(({ day }) => {
+          const active = isActive(day);
+          const openCount = (slots?.[yyyymmdd(day)] || []).filter((slot) => !slot.away).length;
+          return (
+            <button
+              key={`chip-${day.format()}`}
+              type="button"
+              data-testid="day"
+              data-disabled={false}
+              aria-pressed={active}
+              aria-label={`${day.format("dddd, MMMM D")}${openCount ? `, ${openCount} times` : ""}`}
+              onClick={() => {
+                props.onChange(day);
+                props?.scrollToTimeSlots?.();
+              }}
+              className={classNames(
+                "flex min-h-[76px] flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-2 tabular-nums transition-[transform,box-shadow,border-color,background-color] duration-150 active:scale-[0.96]",
+                active
+                  ? "bg-brand-default text-brand border-transparent shadow-[0_6px_14px_-6px_color-mix(in_srgb,var(--cal-brand)_60%,transparent)]"
+                  : "bg-default text-emphasis border-subtle hover:border-brand-default bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0)_75%)] shadow-[0_1px_1px_rgba(60,45,20,0.06),0_6px_12px_-8px_rgba(60,45,20,0.30)] hover:-translate-y-px dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_1px_1px_rgba(0,0,0,0.4),0_8px_14px_-8px_rgba(0,0,0,0.65)]"
+              )}>
+              <span className={classNames("text-xs font-medium", active ? "opacity-80" : "text-subtle")}>
+                {day.format("ddd")}
+              </span>
+              <span className="text-xl font-semibold leading-tight">{day.format("D")}</span>
+              <span className={classNames("text-[11px]", active ? "opacity-80" : "text-muted")}>
+                {day.format("MMM")}
+              </span>
+            </button>
+          );
+        })}
+        {!isBookingInPast && bookable.length === 0 && showNoAvailabilityDialog && (
+          <NoAvailabilityDialog
+            month={month}
+            nextMonthButton={nextMonthButton}
+            browsingDate={browsingDate}
+            periodData={periodData}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       {daysToRenderForTheMonth.map(({ day, disabled, away, emoji, isFirstDayOfNextMonth }, idx) => (
@@ -381,6 +446,7 @@ const DatePicker = ({
   },
   isCompact,
   showNoAvailabilityDialog,
+  variant = "month",
   ...passThroughProps
 }: DatePickerProps &
   Partial<React.ComponentProps<typeof Days>> & {
@@ -411,6 +477,37 @@ const DatePicker = ({
         new Date(browsingDate.year(), browsingDate.month())
       )
     : null;
+
+  if (variant === "strip") {
+    return (
+      <div className={className}>
+        <h3 className={classNames("text-emphasis mb-3 text-base font-semibold", customClassNames?.datePickerTitle)}>
+          Choose a day
+        </h3>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(max(68px,calc((100%_-_48px)/7)),1fr))] gap-2">
+          <Days
+            customClassName={{
+              datePickerDate: customClassNames?.datePickersDates,
+              datePickerDateActive: customClassNames?.datePickerDatesActive,
+            }}
+            weekStart={weekStart}
+            selected={selected}
+            {...passThroughProps}
+            browsingDate={browsingDate}
+            month={month}
+            nextMonthButton={() => changeMonth(+1)}
+            slots={slots}
+            includedDates={includedDates}
+            isBookingInPast={isBookingInPast}
+            periodData={periodData}
+            isCompact={isCompact}
+            showNoAvailabilityDialog={showNoAvailabilityDialog}
+            variant="strip"
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={className}>

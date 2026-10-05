@@ -306,34 +306,34 @@ export const AvailableTimes = ({
           const current = groups.find((group) => group.label === part) ?? groups[0];
           return (
             <>
+              {groups.length > 1 ? (
+                <div
+                  role="group"
+                  aria-label="Part of day"
+                  className="bg-muted border-subtle mb-3 inline-flex gap-0.5 rounded-[11px] border p-[3px] shadow-[inset_0_1px_3px_rgba(60,45,20,0.12)] dark:shadow-[inset_0_1px_3px_rgba(0,0,0,0.45)]">
+                  {groups.map((group) => {
+                    const selected = group.label === current.label;
+                    return (
+                      <button
+                        key={group.label}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setPart(group.label)}
+                        className={classNames(
+                          "h-9 rounded-lg px-3.5 text-[13px] font-medium transition-colors",
+                          selected
+                            ? "bg-default text-emphasis bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0))] shadow-[0_1px_2px_rgba(60,45,20,0.12)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_1px_3px_rgba(0,0,0,0.45)]"
+                            : "text-subtle hover:text-emphasis"
+                        )}>
+                        {group.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
               <div
-                role="tablist"
-                aria-label="Part of day"
-                className="bg-muted border-subtle mb-3 inline-flex gap-0.5 rounded-[11px] border p-[3px] shadow-[inset_0_1px_3px_rgba(60,45,20,0.12)] dark:shadow-[inset_0_1px_3px_rgba(0,0,0,0.45)]">
-                {groups.map((group) => {
-                  const selected = group.label === current.label;
-                  return (
-                    <button
-                      key={group.label}
-                      type="button"
-                      role="tab"
-                      aria-selected={selected}
-                      onClick={() => setPart(group.label)}
-                      className={classNames(
-                        "h-8 rounded-lg px-3 text-[13px] font-medium transition-colors",
-                        selected
-                          ? "bg-default text-emphasis bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0))] shadow-[0_1px_2px_rgba(60,45,20,0.12)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_1px_3px_rgba(0,0,0,0.45)]"
-                          : "text-subtle hover:text-emphasis"
-                      )}>
-                      {group.label} <span className="text-muted font-normal">{group.slots.length}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div
-                role="tabpanel"
-                aria-label={current.label}
-                className="grid grid-cols-[repeat(auto-fill,minmax(max(84px,calc((100%_-_24px)/4)),1fr))] gap-2">
+                aria-label={`${current.label} times`}
+                className="grid tabular-nums grid-cols-[repeat(auto-fill,minmax(max(84px,calc((100%_-_24px)/4)),1fr))] gap-2">
                 {current.slots.map((slot) => (
                   <SlotItem key={slot.time} slot={slot} {...props} />
                 ))}

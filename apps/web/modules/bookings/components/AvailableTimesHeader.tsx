@@ -1,4 +1,6 @@
 import { shallow } from "zustand/shallow";
+import { useBookerTime } from "@calcom/features/bookings/Booker/hooks/useBookerTime";
+import { rbpZoneName } from "../lib/rbpZoneName";
 
 import type { Dayjs } from "@calcom/dayjs";
 import dayjs from "@calcom/dayjs";
@@ -32,6 +34,24 @@ export const AvailableTimesHeader = ({
   const isColumnView = layout === BookerLayouts.COLUMN_VIEW;
   const isMonthView = layout === BookerLayouts.MONTH_VIEW;
   const isToday = dayjs().isSame(date, "day");
+  const { timezone } = useBookerTime();
+
+  // rbp: one plain line, "Tuesday, October 6", with the lead's zone beside it,
+  // instead of "Tue 06". Column view keeps upstream's compact per-column header.
+  if (!isColumnView) {
+    return (
+      <header
+        className={classNames(
+          "mb-3 flex w-full flex-wrap items-baseline justify-between gap-x-3 gap-y-1",
+          customClassNames?.availableTimeSlotsHeaderContainer
+        )}>
+        <h3 className={classNames("text-emphasis text-base font-semibold", customClassNames?.availableTimeSlotsTitle)}>
+          {date.format("dddd, MMMM D")}
+        </h3>
+        <span className="text-subtle text-xs">{rbpZoneName(timezone)}</span>
+      </header>
+    );
+  }
 
   return (
     <header

@@ -240,6 +240,17 @@ export type EventDataMap = {
    */
   navigatedToBooker: Record<string, never>;
   /**
+   * rbp: the booker's picked-but-not-booked slot, so the parent page can show
+   * its own Set appointment bar while the in-frame one is below its fold.
+   * active is false once the slot list unmounts (the form took over).
+   */
+  rbpSlotState: {
+    active: boolean;
+    picked: boolean;
+    label: string | null;
+    zone: string;
+  };
+  /**
    * Wildcard event that fires for all events.
    * Purpose: Allow listening to all events with a single handler.
    */
