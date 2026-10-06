@@ -488,7 +488,10 @@ export const getRichDescriptionHTML = (
   };
 
   // Convert the manage link to a clickable hyperlink
-  const manageLinkText = getManageLink(calEvent, t);
+  // rbp: no reschedule/cancel link in invites or email bodies (Grey,
+  // 2026-10-05: it invites cold feet). getManageLink stays for the
+  // host-requested reschedule email.
+  const manageLinkText: string = "";
   const manageLinkHtml = manageLinkText
     ? (() => {
         const words = manageLinkText.split(" ");
@@ -595,9 +598,7 @@ export const getRichDescription = (
     getAdditionalNotes(t, calEvent.additionalNotes),
     getUserFieldsResponses(calEvent, t),
     includeAppStatus ? getAppsStatus(t, calEvent.appsStatus) : "",
-    // TODO: Only the original attendee can make changes to the event
-    // Guests cannot
-    calEvent.seatsPerTimeSlot ? "" : getManageLink(calEvent, t),
+    // rbp: no reschedule/cancel link (see getRichDescriptionHTML).
     calEvent.paymentInfo ? `${t("pay_now")}:\n${calEvent.paymentInfo.link}` : "",
   ]
     .filter(Boolean) // Remove empty strings
