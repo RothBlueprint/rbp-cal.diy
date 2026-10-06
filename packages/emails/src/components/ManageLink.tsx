@@ -39,6 +39,10 @@ export function ManageLink(props: { calEvent: CalendarEvent; attendee: Person })
   const shouldDisplayRescheduleLink = Boolean(hasRescheduleLink && !isRecurringEvent);
   const isTeamMember = props.calEvent.team?.members.some((member) => props.attendee.email === member.email);
 
+  // rbp: the lead's emails carry no reschedule/cancel links (Grey, 2026-10-05:
+  // they invite cold feet). The host and team members keep them.
+  if (!isOrganizer && !isTeamMember) return null;
+
   if (
     (isOriginalAttendee || isOrganizer || isTeamMember) &&
     (hasCancelLink || (!isRecurringEvent && hasRescheduleLink) || hasBookingLink)
