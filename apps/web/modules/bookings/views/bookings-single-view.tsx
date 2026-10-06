@@ -28,7 +28,6 @@ import { isWithinMinimumRescheduleNotice as isWithinMinimumRescheduleNoticeUtil 
 import type { nameObjectSchema } from "@calcom/features/eventtypes/lib/eventNaming";
 import { getEventName } from "@calcom/features/eventtypes/lib/eventNaming";
 import { shouldShowFieldInCustomResponses } from "@calcom/lib/bookings/SystemField";
-import { APP_NAME } from "@calcom/lib/constants";
 import { formatToLocalizedDate, formatToLocalizedTime, formatToLocalizedTimezone } from "@calcom/lib/dayjs";
 import useGetBrandingColours from "@calcom/lib/getBrandColours";
 import { useCompatSearchParams } from "@calcom/lib/hooks/useCompatSearchParams";
@@ -52,7 +51,7 @@ import { Avatar } from "@calcom/ui/components/avatar";
 import { Badge } from "@calcom/ui/components/badge";
 import { Button } from "@calcom/ui/components/button";
 import { EmptyScreen } from "@calcom/ui/components/empty-screen";
-import { EmailInput, TextArea } from "@calcom/ui/components/form";
+import { TextArea } from "@calcom/ui/components/form";
 import { Icon } from "@calcom/ui/components/icon";
 import {
   CalendarIcon,
@@ -67,6 +66,7 @@ import CancelBooking from "@calcom/web/components/booking/CancelBooking";
 import EventReservationSchema from "@calcom/web/components/schemas/EventReservationSchema";
 import { timeZone } from "@calcom/web/lib/clock";
 
+import { RbpBookedCard } from "../components/RbpBookedCard";
 import { usePaymentStatus } from "../hooks/usePaymentStatus";
 import type { PageProps } from "./bookings-single-view.getServerSideProps";
 
@@ -460,6 +460,69 @@ export default function Success(props: PageProps) {
     return isRecurringBooking ? t("meeting_is_scheduled_recurring") : t("meeting_is_scheduled");
   })();
 
+  // rbp: the lead's own view of their booking (just booked, moved, the cancel
+  // step, cancelled) is RbpBookedCard instead of Cal's page. Every other state
+  // (past, pending, payment, rerouted, recurring, seats, the superseded side of
+  // a reschedule, and the host's own view) keeps Cal's page.
+  const rbpLeadView =
+    !isFeedbackMode &&
+    !isHost &&
+    !userIsOwner &&
+    !needsConfirmation &&
+    !isAwaitingPayment &&
+    !isRerouting &&
+    !isRescheduled &&
+    !seatReferenceUid &&
+    !props.recurringBookings &&
+    !props.paymentStatus;
+  const rbpState = !rbpLeadView
+    ? null
+    : isEventCancelled
+      ? "cancelled"
+      : isCancelled || isPastBooking
+        ? null
+        : isCancellationMode
+          ? "cancelling"
+          : formerTime
+            ? "moved"
+            : "booked";
+  const showRbpBooked = rbpState !== null;
+  const cancelBooking = (
+    <CancelBooking
+      booking={{
+        uid: bookingInfo?.uid,
+        title: bookingInfo?.title,
+        id: bookingInfo?.id,
+        startTime: bookingInfo?.startTime,
+        payment: props.paymentStatus,
+      }}
+      eventTypeMetadata={eventType.metadata}
+      requiresCancellationReason={eventType.requiresCancellationReason}
+      profile={{ name: props.profile.name, slug: props.profile.slug }}
+      recurringEvent={eventType.recurringEvent}
+      team={eventType?.team?.name}
+      teamId={eventType?.team?.id}
+      setIsCancellationMode={setIsCancellationMode}
+      theme={isSuccessBookingPage ? props.profile.theme : "light"}
+      allRemainingBookings={allRemainingBookings}
+      seatReferenceUid={seatReferenceUid}
+      bookingCancelledEventProps={bookingCancelledEventProps}
+      currentUserEmail={currentUserEmail}
+      isHost={isHost}
+      internalNotePresets={props.internalNotePresets}
+      renderContext="booking-single-view"
+    />
+  );
+  const rbpCalendarLinks = [
+    googleCalendarLink && { label: "Google", href: googleCalendarLink },
+    microsoftOutlookLink && { label: "Outlook", href: microsoftOutlookLink },
+    microsoftOfficeLink && { label: "Office 365", href: microsoftOfficeLink },
+    icsLink && { label: "Apple / other", href: icsLink, download: "blueprint-review.ics" },
+  ].filter((link): link is { label: string; href: string; download?: string } => !!link);
+  const rbpCanReschedule =
+    canReschedule && !isRescheduleDisabled && !requiresLoginToUpdate && canCancelOrReschedule;
+  const rbpCanCancel = canCancel && !requiresLoginToUpdate && canCancelOrReschedule;
+
   return (
     <div className={isEmbed ? "" : "h-screen"} data-testid="success-page">
       {!isEmbed && !isFeedbackMode && (
@@ -503,15 +566,38 @@ export default function Success(props: PageProps) {
               aria-hidden="true">
               <div
                 className={classNames(
-                  "inline-block transform overflow-hidden rounded-lg border sm:my-8 sm:max-w-xl",
-                  !isBackgroundTransparent &&
-                    " bg-default dark:bg-cal-muted border-booker border-booker-width",
-                  "px-8 pb-4 pt-5 text-left align-bottom transition-all sm:w-full sm:py-8 sm:align-middle"
+                  showRbpBooked
+                    ? "w-full px-4 sm:max-w-xl"
+                    : [
+                        "inline-block transform overflow-hidden rounded-lg border sm:my-8 sm:max-w-xl",
+                        !isBackgroundTransparent &&
+                          " bg-default dark:bg-cal-muted border-booker border-booker-width",
+                        "px-8 pb-4 pt-5 text-left align-bottom transition-all sm:w-full sm:py-8 sm:align-middle",
+                      ]
                 )}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="modal-headline">
-                {!isFeedbackMode && (
+                {rbpState && (
+                  <RbpBookedCard
+                    state={rbpState}
+                    startTime={bookingInfo.startTime}
+                    endTime={bookingInfo.endTime}
+                    timezone={tz}
+                    email={bookingInfo.attendees[0]?.email}
+                    calendarLinks={rbpCalendarLinks}
+                    rescheduleHref={
+                      rbpCanReschedule
+                        ? `/reschedule/${seatReferenceUid || bookingInfo?.uid}${
+                            currentUserEmail ? `?rescheduledBy=${encodeURIComponent(currentUserEmail)}` : ""
+                          }`
+                        : undefined
+                    }
+                    onCancel={rbpCanCancel ? () => setIsCancellationMode(true) : undefined}>
+                    {rbpState === "cancelling" && cancelBooking}
+                  </RbpBookedCard>
+                )}
+                {!isFeedbackMode && !showRbpBooked && (
                   <>
                     <div
                       className={classNames(isRoundRobin && "min-h-24 min-w-32 relative mx-auto h-24 w-32")}>
@@ -645,7 +731,7 @@ export default function Success(props: PageProps) {
                                     </span>
                                     <Badge variant="blue">{t("Host")}</Badge>
                                   </div>
-                                  {!bookingInfo.eventType?.hideOrganizerEmail && (
+                                  {(isHost || userIsOwner) && !bookingInfo.eventType?.hideOrganizerEmail && (
                                     <p className="text-default" data-testid="booking-host-email">
                                       {bookingInfo?.userPrimaryEmail ?? bookingInfo.user.email}
                                     </p>
@@ -922,30 +1008,7 @@ export default function Success(props: PageProps) {
                       ) : (
                         <>
                           <hr className="border-subtle" />
-                          <CancelBooking
-                            booking={{
-                              uid: bookingInfo?.uid,
-                              title: bookingInfo?.title,
-                              id: bookingInfo?.id,
-                              startTime: bookingInfo?.startTime,
-                              payment: props.paymentStatus,
-                            }}
-                            eventTypeMetadata={eventType.metadata}
-                            requiresCancellationReason={eventType.requiresCancellationReason}
-                            profile={{ name: props.profile.name, slug: props.profile.slug }}
-                            recurringEvent={eventType.recurringEvent}
-                            team={eventType?.team?.name}
-                            teamId={eventType?.team?.id}
-                            setIsCancellationMode={setIsCancellationMode}
-                            theme={isSuccessBookingPage ? props.profile.theme : "light"}
-                            allRemainingBookings={allRemainingBookings}
-                            seatReferenceUid={seatReferenceUid}
-                            bookingCancelledEventProps={bookingCancelledEventProps}
-                            currentUserEmail={currentUserEmail}
-                            isHost={isHost}
-                            internalNotePresets={props.internalNotePresets}
-                            renderContext="booking-single-view"
-                          />
+                          {cancelBooking}
                         </>
                       ))}
                     {isRerouting && typeof window !== "undefined" && window.opener && (
@@ -1034,40 +1097,6 @@ export default function Success(props: PageProps) {
                       </>
                     )}
 
-                    {session === null && !(userIsOwner || props.hideBranding) && (
-                      <>
-                        <hr className="border-subtle mt-8" />
-                        <div className="text-default pt-8 text-center text-xs">
-                          <a href="https://cal.com/signup">
-                            {t("create_booking_link_with_calcom", { appName: APP_NAME })}
-                          </a>
-
-                          <form
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              const target = e.target as typeof e.target & {
-                                email: { value: string };
-                              };
-                              router.push(`https://cal.com/signup?email=${target.email.value}`);
-                            }}
-                            className="mt-4 flex">
-                            <EmailInput
-                              name="email"
-                              id="email"
-                              defaultValue={email}
-                              className="mr- focus:border-brand-default border-default text-default mt-0 block w-full rounded-none rounded-l-md shadow-sm focus:ring-black sm:text-sm"
-                              placeholder="rick.astley@cal.com"
-                            />
-                            <Button
-                              type="submit"
-                              className="min-w-max rounded-none rounded-r-md"
-                              color="primary">
-                              {t("try_for_free")}
-                            </Button>
-                          </form>
-                        </div>
-                      </>
-                    )}
                   </>
                 )}
                 {isFeedbackMode &&
