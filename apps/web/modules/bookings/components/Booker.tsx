@@ -400,7 +400,12 @@ const BookerComponent = ({
             <StickyOnDesktop key="meta" className={classNames("relative z-10 flex [grid-area:meta]")}>
               <BookerSection
                 area="meta"
-                className="max-w-screen flex w-full flex-col md:w-(--booker-meta-width)">
+                // rbp: stacked (mobile) layout runs full width at any frame width; the
+                // fixed meta column only belongs beside a calendar.
+                className={classNames(
+                  "max-w-screen flex w-full flex-col",
+                  layout !== "mobile" && "md:w-(--booker-meta-width)"
+                )}>
                 {!hideEventTypeDetails && orgBannerUrl && (
                   <img
                     loading="eager"
@@ -454,7 +459,10 @@ const BookerComponent = ({
             <BookerSection
               key="book-event-form"
               area="main"
-              className="sticky top-0 -ml-px h-full p-6 md:w-(--booker-main-width) md:border-l"
+              className={classNames(
+                "sticky top-0 -ml-px h-full p-6",
+                layout !== "mobile" && "md:w-(--booker-main-width) md:border-l"
+              )}
               {...fadeInLeft}
               visible={bookerState === "booking" && !shouldShowFormInDialog}>
               {EventBooker}
