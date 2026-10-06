@@ -17,7 +17,7 @@ import { SkeletonText } from "@calcom/ui/components/skeleton";
 import { CalendarX2Icon } from "@coss/ui/icons";
 import * as HoverCard from "@radix-ui/react-hover-card";
 import { AnimatePresence, m } from "framer-motion";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { Slot } from "~/schedules/lib/types";
 import type { IUseBookingLoadingStates } from "../hooks/useBookings";
 import { OutOfOfficeInSlots } from "./OutOfOfficeInSlots";
@@ -149,7 +149,9 @@ const SlotItem = ({
   const isTimeslotUnavailable = unavailableTimeSlots.includes(slot.time);
   return (
     <AnimatePresence>
-      <div className="flex gap-2">
+      {/* rbp: slots sit in a grid (see AvailableTimes). A slot showing its confirm
+          button takes the whole row so the time and the button both fit. */}
+      <div className={classNames("flex gap-2", slot.showConfirmButton && "col-span-full")}>
         <Button
           key={slot.time}
           disabled={
@@ -166,8 +168,12 @@ const SlotItem = ({
           data-time={slot.time}
           onClick={onButtonClick}
           className={classNames(
-            `hover:border-brand-default min-h-9 mb-2 flex h-auto w-full grow flex-col justify-center py-2`,
-            selectedSlots?.includes(slot.time) && "border-brand-default",
+            // rbp: raised "keys" (top highlight, near and far shadow) that lift on
+            // hover and press in on click; the picked one sits tinted and ringed.
+            `hover:border-brand-default min-h-11 flex h-auto w-full grow flex-col justify-center rounded-[10px] py-2 text-[15px] transition-[transform,box-shadow,border-color,background-color] duration-150 not-disabled:active:translate-y-0 not-disabled:active:scale-[0.96]`,
+            selectedSlots?.includes(slot.time)
+              ? "border-brand-default font-semibold bg-[linear-gradient(0deg,color-mix(in_srgb,var(--cal-brand)_16%,transparent),color-mix(in_srgb,var(--cal-brand)_16%,transparent))] shadow-[inset_0_1px_2px_rgba(0,0,0,0.22),0_0_0_3px_color-mix(in_srgb,var(--cal-brand)_20%,transparent)] not-disabled:hover:shadow-[inset_0_1px_2px_rgba(0,0,0,0.22),0_0_0_3px_color-mix(in_srgb,var(--cal-brand)_20%,transparent)] dark:not-disabled:hover:shadow-[inset_0_1px_2px_rgba(0,0,0,0.22),0_0_0_3px_color-mix(in_srgb,var(--cal-brand)_20%,transparent)]"
+              : "bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0)_75%)] border-subtle shadow-[0_1px_1px_rgba(60,45,20,0.06),0_6px_12px_-8px_rgba(60,45,20,0.30)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_1px_1px_rgba(0,0,0,0.4),0_8px_14px_-8px_rgba(0,0,0,0.65)] not-disabled:hover:-translate-y-px not-disabled:hover:shadow-[0_2px_3px_rgba(60,45,20,0.08),0_10px_18px_-10px_rgba(60,45,20,0.4)] dark:not-disabled:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.09),0_2px_3px_rgba(0,0,0,0.45),0_12px_20px_-10px_rgba(0,0,0,0.75)]",
             `${customClassNames}`
           )}
           color="secondary">
@@ -262,6 +268,8 @@ export const AvailableTimes = ({
   ...props
 }: AvailableTimesProps) => {
   const { t } = useLocale();
+  const { timezone } = useBookerTime();
+  const [part, setPart] = useState<string | null>(null);
 
   const oooAllDay = slots.every((slot) => slot.away);
   if (oooAllDay) {
@@ -286,15 +294,74 @@ export const AvailableTimes = ({
           </div>
         )}
         {oooBeforeSlots && !oooAfterSlots && <OOOSlot {...slots[0]} />}
-        {slots.map((slot) => {
-          if (slot.away) return null;
-          return <SlotItem key={slot.time} slot={slot} {...props} />;
-        })}
+        {/* rbp: Morning / Afternoon / Evening tabs over a compact grid, so one short
+            block shows at a time instead of a day's worth of buttons. Grouped by
+            the hour in the booker's time zone, the zone the labels print in. */}
+        {(() => {
+          const groups = groupSlotsByPartOfDay(
+            slots.filter((slot) => !slot.away),
+            timezone
+          );
+          if (!groups.length) return null;
+          const current = groups.find((group) => group.label === part) ?? groups[0];
+          return (
+            <>
+              {groups.length > 1 ? (
+                <div
+                  role="group"
+                  aria-label="Part of day"
+                  className="bg-muted border-subtle mb-3 inline-flex gap-0.5 rounded-[11px] border p-[3px] shadow-[inset_0_1px_3px_rgba(60,45,20,0.12)] dark:shadow-[inset_0_1px_3px_rgba(0,0,0,0.45)]">
+                  {groups.map((group) => {
+                    const selected = group.label === current.label;
+                    return (
+                      <button
+                        key={group.label}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setPart(group.label)}
+                        className={classNames(
+                          "h-9 rounded-lg px-3.5 text-[13px] font-medium transition-colors",
+                          selected
+                            ? "bg-default text-emphasis bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0))] shadow-[0_1px_2px_rgba(60,45,20,0.12)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_1px_3px_rgba(0,0,0,0.45)]"
+                            : "text-subtle hover:text-emphasis"
+                        )}>
+                        {group.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              <div
+                aria-label={`${current.label} times`}
+                className="grid tabular-nums grid-cols-[repeat(auto-fill,minmax(max(84px,calc((100%_-_24px)/4)),1fr))] gap-2">
+                {current.slots.map((slot) => (
+                  <SlotItem key={slot.time} slot={slot} {...props} />
+                ))}
+              </div>
+            </>
+          );
+        })()}
         {oooAfterSlots && !oooBeforeSlots && <OOOSlot {...slots[slots.length - 1]} className="pb-0" />}
       </div>
     </div>
   );
 };
+
+const PARTS_OF_DAY = [
+  { label: "Morning", before: 12 },
+  { label: "Afternoon", before: 17 },
+  { label: "Evening", before: 24 },
+];
+
+function groupSlotsByPartOfDay(slots: Slots[string], timezone: string) {
+  const groups = PARTS_OF_DAY.map((part) => ({ label: part.label, slots: [] as Slots[string] }));
+  for (const slot of slots) {
+    const hour = dayjs.utc(slot.time).tz(timezone).hour();
+    const index = PARTS_OF_DAY.findIndex((part) => hour < part.before);
+    groups[index].slots.push(slot);
+  }
+  return groups.filter((group) => group.slots.length > 0);
+}
 
 interface IOOOSlotProps {
   fromUser?: IOutOfOfficeData["anyDate"]["fromUser"];

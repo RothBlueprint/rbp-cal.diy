@@ -15,6 +15,7 @@ import {
 import {
   CreateEventTypeInput_2024_06_14,
   GetBookingsInput_2024_08_13,
+  UpdateEventTypeInput_2024_06_14,
   UpdateScheduleInput_2024_06_11,
 } from "@calcom/platform-types";
 import type { GetBookingsOutput_2024_08_13 } from "@calcom/platform-types";
@@ -189,6 +190,23 @@ export class UsersAdminController {
     @Body() body: CreateEventTypeInput_2024_06_14
   ): Promise<AdminDataResponse> {
     const data = await this.usersAdminService.createUserEventType(userId, body);
+
+    return { status: SUCCESS_STATUS, data };
+  }
+
+  // Mirrors PATCH /v2/event-types/:eventTypeId for the same reason POST does: the
+  // public route only updates event types the bearer owns, and rbp's key is the
+  // admin's. rbp uses it to keep every agent's booking window in step with
+  // BOOKING_WINDOW_DAYS in rothblueprint_lead/cal_client.py, over the API.
+
+  @Patch("/:userId/event-types/:eventTypeId")
+  @ApiOperation({ summary: "Update a user's personal event type (admin only)" })
+  async updateUserEventType(
+    @Param("userId", ParseIntPipe) userId: number,
+    @Param("eventTypeId", ParseIntPipe) eventTypeId: number,
+    @Body() body: UpdateEventTypeInput_2024_06_14
+  ): Promise<AdminDataResponse> {
+    const data = await this.usersAdminService.updateUserEventType(userId, eventTypeId, body);
 
     return { status: SUCCESS_STATUS, data };
   }

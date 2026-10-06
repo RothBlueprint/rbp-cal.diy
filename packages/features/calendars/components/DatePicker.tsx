@@ -51,6 +51,12 @@ export type DatePickerProps = {
   isCompact?: boolean;
   // Whether to show the no availability dialog
   showNoAvailabilityDialog?: boolean;
+  /**
+   * rbp: "strip" lists only the bookable days as one row of chips (wrapping on a
+   * phone) instead of a month grid. Leads book at most 7 business days out, so a
+   * month showed 7 live days among 35 cells.
+   */
+  variant?: "month" | "strip";
 };
 
 const Day = ({
@@ -83,17 +89,17 @@ const Day = ({
     <button
       type="button"
       style={disabled ? { ...disabledDateButtonEmbedStyles } : { ...enabledDateButtonEmbedStyles }}
+      // rbp: a 44px circle, not a cell-filling tile. Open days are plain numbers
+      // marked with a brand dot, so a month of openings no longer reads as a
+      // checkerboard; the selected day is the only filled shape.
       className={classNames(
-        "disabled:text-bookinglighter absolute bottom-0 left-0 right-0 top-0 mx-auto w-full cursor-pointer rounded-md border-2 border-transparent text-center text-sm font-medium transition disabled:cursor-default disabled:border-transparent disabled:font-light ",
+        "relative mx-auto flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border text-center text-[15px] transition disabled:cursor-default",
+        date.isToday() && !active ? "border-emphasis" : "border-transparent",
         active
-          ? "bg-brand-default text-brand"
+          ? "bg-brand-default text-brand font-semibold shadow-[0_0_0_4px_color-mix(in_srgb,var(--cal-brand)_16%,transparent),0_6px_14px_-4px_color-mix(in_srgb,var(--cal-brand)_50%,transparent)]"
           : !disabled
-            ? `${
-                !customClassName?.dayActive
-                  ? "hover:border-brand-default text-emphasis bg-emphasis"
-                  : `hover:border-brand-default ${customClassName.dayActive}`
-              }`
-            : `${customClassName ? "" : " text-mute"}`
+            ? `hover:border-brand-default text-emphasis font-medium hover:bg-[color-mix(in_srgb,var(--cal-brand)_10%,transparent)] ${customClassName?.dayActive ?? ""}`
+            : "text-muted font-normal"
       )}
       data-testid="day"
       data-disabled={disabled}
@@ -101,15 +107,13 @@ const Day = ({
       {...props}>
       {away && <span data-testid="away-emoji">{emoji}</span>}
       {!away && date.date()}
-      {date.isToday() && (
+      {!disabled && !active && !away && (
         <span
-          className={classNames(
-            "bg-brand-default absolute left-1/2 top-1/2 flex h-[5px] w-[5px] -translate-x-1/2 translate-y-[8px] items-center justify-center rounded-full align-middle sm:translate-y-[12px]",
-            active && "bg-brand-accent"
-          )}>
-          <span className="sr-only">{t("today")}</span>
-        </span>
+          aria-hidden="true"
+          className="bg-brand-default absolute bottom-[6px] left-1/2 h-1 w-1 -translate-x-1/2 rounded-full"
+        />
       )}
+      {date.isToday() && <span className="sr-only">{t("today")}</span>}
     </button>
   );
 
@@ -157,6 +161,7 @@ const Days = ({
   periodData,
   isCompact,
   showNoAvailabilityDialog = true,
+  variant = "month",
   ...props
 }: Omit<DatePickerProps, "locale" | "className" | "weekStart"> & {
   DayComponent?: React.FC<React.ComponentProps<typeof Day>>;
@@ -313,15 +318,75 @@ const Days = ({
 
   useEffect(useHandleInitialDateSelection);
 
+  if (variant === "strip") {
+    const bookable = daysToRenderForTheMonth.filter(
+      (entry): entry is typeof entry & { day: Dayjs } => !!entry.day && !entry.disabled
+    );
+    if (props.isLoading) {
+      return (
+        <>
+          {Array.from({ length: 7 }).map((_, idx) => (
+            <div key={`s-${idx}`} className="bg-cal-muted h-[76px] rounded-xl opacity-60" />
+          ))}
+        </>
+      );
+    }
+    return (
+      <>
+        {bookable.map(({ day }) => {
+          const active = isActive(day);
+          const openCount = (slots?.[yyyymmdd(day)] || []).filter((slot) => !slot.away).length;
+          return (
+            <button
+              key={`chip-${day.format()}`}
+              type="button"
+              data-testid="day"
+              data-disabled={false}
+              aria-pressed={active}
+              aria-label={`${day.format("dddd, MMMM D")}${openCount ? `, ${openCount} times` : ""}`}
+              onClick={() => {
+                props.onChange(day);
+                props?.scrollToTimeSlots?.();
+              }}
+              className={classNames(
+                "flex min-h-[76px] flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-2 tabular-nums transition-[transform,box-shadow,border-color,background-color] duration-150 active:scale-[0.96]",
+                active
+                  ? "bg-brand-default text-brand border-transparent shadow-[0_6px_14px_-6px_color-mix(in_srgb,var(--cal-brand)_60%,transparent)]"
+                  : "bg-default text-emphasis border-subtle hover:border-brand-default bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0)_75%)] shadow-[0_1px_1px_rgba(60,45,20,0.06),0_6px_12px_-8px_rgba(60,45,20,0.30)] hover:-translate-y-px dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_1px_1px_rgba(0,0,0,0.4),0_8px_14px_-8px_rgba(0,0,0,0.65)]"
+              )}>
+              <span className={classNames("text-xs font-medium", active ? "opacity-80" : "text-subtle")}>
+                {day.format("ddd")}
+              </span>
+              <span className="text-xl font-semibold leading-tight">{day.format("D")}</span>
+              <span className={classNames("text-[11px]", active ? "opacity-80" : "text-muted")}>
+                {day.format("MMM")}
+              </span>
+            </button>
+          );
+        })}
+        {!isBookingInPast && bookable.length === 0 && showNoAvailabilityDialog && (
+          <NoAvailabilityDialog
+            month={month}
+            nextMonthButton={nextMonthButton}
+            browsingDate={browsingDate}
+            periodData={periodData}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       {daysToRenderForTheMonth.map(({ day, disabled, away, emoji, isFirstDayOfNextMonth }, idx) => (
-        <div key={day === null ? `e-${idx}` : `day-${day.format()}`} className="relative w-full pt-[100%]">
+        <div
+          key={day === null ? `e-${idx}` : `day-${day.format()}`}
+          className="relative flex h-12 w-full items-center justify-center">
           {day === null ? (
             <div key={`e-${idx}`} />
           ) : props.isLoading ? (
             <button
-              className="bg-cal-muted text-muted absolute bottom-0 left-0 right-0 top-0 mx-auto flex w-full items-center justify-center rounded-sm border-transparent text-center font-medium opacity-90 transition"
+              className="bg-cal-muted text-muted mx-auto flex h-11 w-11 items-center justify-center rounded-full border-transparent text-center font-medium opacity-90 transition"
               key={`e-${idx}`}
               disabled>
               <SkeletonText className="h-8 w-9" />
@@ -381,6 +446,7 @@ const DatePicker = ({
   },
   isCompact,
   showNoAvailabilityDialog,
+  variant = "month",
   ...passThroughProps
 }: DatePickerProps &
   Partial<React.ComponentProps<typeof Days>> & {
@@ -412,6 +478,37 @@ const DatePicker = ({
       )
     : null;
 
+  if (variant === "strip") {
+    return (
+      <div className={className}>
+        <h3 className={classNames("text-emphasis mb-3 text-base font-semibold", customClassNames?.datePickerTitle)}>
+          Choose a day
+        </h3>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(max(68px,calc((100%_-_48px)/7)),1fr))] gap-2">
+          <Days
+            customClassName={{
+              datePickerDate: customClassNames?.datePickersDates,
+              datePickerDateActive: customClassNames?.datePickerDatesActive,
+            }}
+            weekStart={weekStart}
+            selected={selected}
+            {...passThroughProps}
+            browsingDate={browsingDate}
+            month={month}
+            nextMonthButton={() => changeMonth(+1)}
+            slots={slots}
+            includedDates={includedDates}
+            isBookingInPast={isBookingInPast}
+            periodData={periodData}
+            isCompact={isCompact}
+            showNoAvailabilityDialog={showNoAvailabilityDialog}
+            variant="strip"
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={className}>
       <div className="mb-1 flex items-center justify-between text-xl">
@@ -422,7 +519,7 @@ const DatePicker = ({
                 className={classNames(`text-emphasis font-semibold`, customClassNames?.datePickerTitle)}>
                 {month}
               </strong>{" "}
-              <span className={classNames(`text-subtle font-medium`, customClassNames?.datePickerTitle)}>
+              <span className={classNames(`text-emphasis font-semibold`, customClassNames?.datePickerTitle)}>
                 {browsingDate.format("YYYY")}
               </span>
             </time>
@@ -434,9 +531,8 @@ const DatePicker = ({
           <div className="flex">
             <Button
               className={classNames(
-                `group p-1 opacity-70 transition hover:opacity-100 rtl:rotate-180`,
-                !browsingDate.isAfter(dayjs()) &&
-                  `disabled:text-bookinglighter hover:bg-background hover:opacity-70`,
+                `border-subtle group h-11 w-11 justify-center rounded-[10px] border transition rtl:rotate-180`,
+                !browsingDate.isAfter(dayjs()) && `disabled:text-muted disabled:border-muted`,
                 customClassNames?.datePickerToggle
               )}
               onClick={() => changeMonth(-1)}
@@ -449,7 +545,7 @@ const DatePicker = ({
             />
             <Button
               className={classNames(
-                `group p-1 opacity-70 transition hover:opacity-100 rtl:rotate-180`,
+                `border-subtle group ml-2 h-11 w-11 justify-center rounded-[10px] border transition rtl:rotate-180`,
                 `${customClassNames?.datePickerToggle}`
               )}
               onClick={() => changeMonth(+1)}
@@ -462,19 +558,21 @@ const DatePicker = ({
           </div>
         </div>
       </div>
-      <div className="border-subtle mb-2 grid grid-cols-7 gap-4 border-b border-t text-center md:mb-0 md:border-0">
+      <div className="mb-1 grid grid-cols-7 gap-1 text-center">
         {weekdayNames(locale, weekStart, "short").map((weekDay) => (
           <div
             key={weekDay}
             className={classNames(
-              `text-emphasis my-4 text-xs font-medium uppercase tracking-widest`,
+              `text-subtle my-3 text-xs font-normal`,
               customClassNames?.datePickerDays
             )}>
             {weekDay}
           </div>
         ))}
       </div>
-      <div className="relative grid grid-cols-7 grid-rows-6 gap-1 text-center">
+      {/* rbp: rows only for the weeks this month has. A fixed six left an empty
+          row (and its gap) between a five-week month and the times below. */}
+      <div className="relative grid grid-cols-7 gap-1 text-center">
         <Days
           customClassName={{
             datePickerDate: customClassNames?.datePickersDates,

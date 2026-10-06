@@ -166,6 +166,9 @@ export const DatePicker = ({
       periodData={periodData}
       isCompact={isCompact}
       showNoAvailabilityDialog={showNoAvailabilityDialog}
+      // rbp: the booker's main date picker is a strip of bookable days; the
+      // compact sidebar picker (column view) keeps the month grid.
+      variant={isCompact ? "month" : "strip"}
     />
   );
 };

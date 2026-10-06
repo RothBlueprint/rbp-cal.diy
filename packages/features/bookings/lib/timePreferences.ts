@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import { TimeFormat, detectBrowserTimeFormat, setIs24hClockInLocalStorage } from "@calcom/lib/timeFormat";
+import { TimeFormat, setIs24hClockInLocalStorage } from "@calcom/lib/timeFormat";
 import { CURRENT_TIMEZONE } from "@calcom/lib/timezoneConstants";
 import { localStorage } from "@calcom/lib/webstorage";
 
@@ -19,7 +19,13 @@ const timezoneLocalStorageKey = "timeOption.preferredTimeZone";
  * any changes made in the user settings.
  */
 export const timePreferencesStore = create<TimePreferencesStore>((set) => ({
-  timeFormat: detectBrowserTimeFormat,
+  // rbp: the booker is 12-hour, always. Upstream seeds this from
+  // detectBrowserTimeFormat, which reads the browser locale and a localStorage
+  // key an earlier visit wrote. Every lead and every agent here is in the US, so
+  // the only thing that ever produced a 24-hour booker was a stray locale — and
+  // with the 12h/24h switch gone (TimeFormatToggle) there is no way back from
+  // one. setTimeFormat still works for anything that sets it deliberately.
+  timeFormat: TimeFormat.TWELVE_HOUR,
   setTimeFormat: (format: TimeFormat.TWELVE_HOUR | TimeFormat.TWENTY_FOUR_HOUR) => {
     setIs24hClockInLocalStorage(format === TimeFormat.TWENTY_FOUR_HOUR);
     set({ timeFormat: format });
