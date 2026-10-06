@@ -41,6 +41,48 @@ export function rbpWithinLeadHours<D>(data: D, timezone: string | null | undefin
 }
 
 /**
+ * rbp: the booking window. rbp passes `rbp.days` on the booking link (set in
+ * the Django admin): leads only see days up to that many business days after
+ * today, in the zone the booker shows. Weekends do not count. No param, or a
+ * value that is not a whole number from 1 to 60, means no window. Unlike the
+ * lead-hours rule there is no fallback: a later month is meant to be empty.
+ */
+const RBP_MAX_WINDOW_DAYS = 60;
+
+export function rbpWindowDays(raw: string | null | undefined): number | null {
+  if (!raw || !/^\d+$/.test(raw)) return null;
+  const days = Number(raw);
+  return days >= 1 && days <= RBP_MAX_WINDOW_DAYS ? days : null;
+}
+
+export function rbpLastBookableDay(days: number, timezone: string | null | undefined, now = dayjs()): string {
+  let day = (timezone ? now.tz(timezone) : now).startOf("day");
+  let counted = 0;
+  while (counted < days) {
+    day = day.add(1, "day");
+    const weekday = day.day();
+    if (weekday !== 0 && weekday !== 6) counted++;
+  }
+  return day.format("YYYY-MM-DD");
+}
+
+export function rbpWithinWindow<D>(
+  data: D,
+  days: number | null,
+  timezone: string | null | undefined,
+  now = dayjs()
+): D {
+  const slots = (data as { slots?: Record<string, unknown[]> } | null | undefined)?.slots;
+  if (!slots || !days) return data;
+  const last = rbpLastBookableDay(days, timezone, now);
+  const kept: Record<string, unknown[]> = {};
+  for (const [date, daySlots] of Object.entries(slots)) {
+    if (date <= last) kept[date] = daySlots;
+  }
+  return { ...data, slots: kept };
+}
+
+/**
  * Wrapper hook around the trpc query that fetches
  * the event currently viewed in the booker. It will get
  * the current event slug and username from the booker store.
@@ -149,7 +191,11 @@ export const useScheduleForEvent = ({
     bookerLayout,
   });
 
-  const data = useMemo(() => rbpWithinLeadHours(schedule?.data, timezone), [schedule?.data, timezone]);
+  const windowDays = rbpWindowDays(searchParams?.get("rbp.days"));
+  const data = useMemo(
+    () => rbpWithinWindow(rbpWithinLeadHours(schedule?.data, timezone), windowDays, timezone),
+    [schedule?.data, timezone, windowDays]
+  );
 
   return {
     data,
