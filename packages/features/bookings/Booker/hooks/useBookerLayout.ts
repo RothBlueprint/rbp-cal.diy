@@ -27,9 +27,14 @@ export const useBookerLayout = (
   const isMobile = useMediaQuery("(max-width: 768px)");
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const embedUiConfig = useEmbedUiConfig();
+  // rbp: the embed always uses the stacked layout (the day strip above the
+  // times, the form below). The day strip is built for that width; in
+  // month_view's side-by-side grid a frame wider than 768px squeezed the days
+  // into a narrow column of one day per row (live results page, 2026-10-05).
+  const isStacked = isMobile || isEmbed;
   // In Embed we give preference to embed configuration for the layout.If that's not set, we use the App configuration for the event layout
   // But if it's mobile view, there is only one layout supported which is 'mobile'
-  const layout = isEmbed ? (isMobile ? "mobile" : validateLayout(embedUiConfig.layout) || _layout) : _layout;
+  const layout = isEmbed ? (isStacked ? "mobile" : validateLayout(embedUiConfig.layout) || _layout) : _layout;
   const extraDays = isTablet ? extraDaysConfig[layout].tablet : extraDaysConfig[layout].desktop;
   const embedType = useEmbedType();
   // Floating Button and Element Click both are modal and thus have dark background
@@ -43,12 +48,12 @@ export const useBookerLayout = (
     : bookerLayouts.defaultLayout;
 
   useEffect(() => {
-    if (isMobile && layout !== "mobile") {
+    if (isStacked && layout !== "mobile") {
       setLayout("mobile");
-    } else if (!isMobile && layout === "mobile") {
+    } else if (!isStacked && layout === "mobile") {
       setLayout(defaultLayout);
     }
-  }, [isMobile, setLayout, layout, defaultLayout]);
+  }, [isStacked, setLayout, layout, defaultLayout]);
   //setting layout from query param
   useEffect(() => {
     const layout = getQueryParam("layout") as BookerLayouts;
