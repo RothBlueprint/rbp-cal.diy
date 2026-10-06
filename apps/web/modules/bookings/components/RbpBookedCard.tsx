@@ -17,6 +17,9 @@ type CalendarLink = { label: string; href: string; download?: string };
  *   booked      just booked: is it booked, when, what happens next
  *   moved       the new booking after a reschedule
  *   cancelling  the cancel step; Cal's own cancel form goes in `children`
+ *
+ * No reschedule or cancel links on the booked page (Grey, 2026-10-05: they
+ * invite cold feet). The confirmation email still carries them.
  *   cancelled   after cancelling
  */
 export type RbpBookingState = "booked" | "moved" | "cancelling" | "cancelled";
@@ -35,8 +38,6 @@ export const RbpBookedCard = ({
   timezone,
   email,
   calendarLinks = [],
-  rescheduleHref,
-  onCancel,
   children,
 }: {
   state: RbpBookingState;
@@ -45,8 +46,6 @@ export const RbpBookedCard = ({
   timezone: string;
   email?: string;
   calendarLinks?: CalendarLink[];
-  rescheduleHref?: string;
-  onCancel?: () => void;
   children?: ReactNode;
 }) => {
   const start = dayjs.utc(startTime).tz(timezone);
@@ -140,29 +139,6 @@ export const RbpBookedCard = ({
         </div>
       )}
 
-      {live && (rescheduleHref || onCancel) && (
-        <p className="text-subtle mt-8 text-sm">
-          Need a different time?{" "}
-          {rescheduleHref && (
-            <Link
-              href={rescheduleHref}
-              className="text-emphasis font-medium underline-offset-4 hover:underline"
-              data-testid="reschedule-link">
-              Reschedule
-            </Link>
-          )}
-          {rescheduleHref && onCancel && " or "}
-          {onCancel && (
-            <button
-              type="button"
-              onClick={onCancel}
-              data-testid="cancel"
-              className="text-emphasis font-medium underline-offset-4 hover:underline">
-              cancel
-            </button>
-          )}
-        </p>
-      )}
     </div>
   );
 };

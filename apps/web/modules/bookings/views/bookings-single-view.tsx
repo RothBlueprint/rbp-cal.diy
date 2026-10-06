@@ -519,10 +519,6 @@ export default function Success(props: PageProps) {
     microsoftOfficeLink && { label: "Office 365", href: microsoftOfficeLink },
     icsLink && { label: "Apple / other", href: icsLink, download: "blueprint-review.ics" },
   ].filter((link): link is { label: string; href: string; download?: string } => !!link);
-  const rbpCanReschedule =
-    canReschedule && !isRescheduleDisabled && !requiresLoginToUpdate && canCancelOrReschedule;
-  const rbpCanCancel = canCancel && !requiresLoginToUpdate && canCancelOrReschedule;
-
   return (
     <div className={isEmbed ? "" : "h-screen"} data-testid="success-page">
       {!isEmbed && !isFeedbackMode && (
@@ -585,15 +581,7 @@ export default function Success(props: PageProps) {
                     endTime={bookingInfo.endTime}
                     timezone={tz}
                     email={bookingInfo.attendees[0]?.email}
-                    calendarLinks={rbpCalendarLinks}
-                    rescheduleHref={
-                      rbpCanReschedule
-                        ? `/reschedule/${seatReferenceUid || bookingInfo?.uid}${
-                            currentUserEmail ? `?rescheduledBy=${encodeURIComponent(currentUserEmail)}` : ""
-                          }`
-                        : undefined
-                    }
-                    onCancel={rbpCanCancel ? () => setIsCancellationMode(true) : undefined}>
+                    calendarLinks={rbpCalendarLinks}>
                     {rbpState === "cancelling" && cancelBooking}
                   </RbpBookedCard>
                 )}
