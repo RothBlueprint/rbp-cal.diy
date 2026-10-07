@@ -5,32 +5,85 @@ name: Build & Deploy
 #   ghcr.io/rothblueprint/rbp-cal-web:<branch>  (Next.js web, port 3000)
 #   ghcr.io/rothblueprint/rbp-cal-api:<branch>  (NestJS API v2, port 5555)
 #
-# The deploy job is inert until repo VARIABLES are set (after the
-# CalendarStack lands via cdktf):
-#   DEPLOY_ENABLED       "true" to activate the deploy job
-#   AWS_DEPLOY_ROLE_ARN  rbp-calendar-deploy role ARN (CalendarStack output)
-#   MIGRATE_SUBNETS      comma-separated private subnet ids
-#   MIGRATE_SG           cal tasks security group id
+# Branch -> environment (CalendarStack / CalendarEnvironment in the rbp infra):
+#   development -> development  calendar-dev.rothblueprint.com, cal-*-dev
+#   main        -> production   calendar.rothblueprint.com,     cal-*
 #
-# Build-args are placeholders: the web image rewrites NEXT_PUBLIC_WEBAPP_URL
-# at container start (scripts/replace-placeholder.sh), and the api build
-# only needs a syntactically valid DATABASE_URL for prisma generate.
-# Real configuration arrives at runtime from AWS Secrets Manager.
+# Deploys go through the GitHub Environment of the same name. `production`
+# requires a reviewer's approval and only accepts the main branch;
+# `development` only accepts the development branch.
+#
+# Variables (repo-level unless noted; environment-level values override):
+#   DEPLOY_ENABLED       "true" to deploy main to production
+#   DEV_DEPLOY_ENABLED   "true" to deploy development to development
+#   AWS_DEPLOY_ROLE_ARN  rbp-calendar-deploy; the development environment
+#                        overrides it with rbp-calendar-dev-deploy
+#   MIGRATE_SUBNETS      comma-separated private subnet ids
+#   MIGRATE_SG           cal tasks security group id; the development
+#                        environment overrides it with rbp-calendar-dev-tasks
+#
+# NEXT_PUBLIC_WEBAPP_URL is rewritten at container start
+# (scripts/replace-placeholder.sh), but NEXT_PUBLIC_API_V2_URL is inlined at
+# build time, so each branch builds with its own URLs. The api build only
+# needs a syntactically valid DATABASE_URL for prisma generate. Real
+# configuration arrives at runtime from AWS Secrets Manager.
 
 on:
   push:
-    branches: [main]
+    branches: [main, development]
     # Markdown-only commits do not change either image; skip the ~16 minute build.
     paths-ignore:
       - "**.md"
   workflow_dispatch:
 
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
 
 jobs:
+  target:
+    name: Resolve environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.resolve.outputs.environment }}
+      web_url: ${{ steps.resolve.outputs.web_url }}
+      api_url: ${{ steps.resolve.outputs.api_url }}
+      suffix: ${{ steps.resolve.outputs.suffix }}
+      deploy: ${{ steps.resolve.outputs.deploy }}
+    steps:
+      - id: resolve
+        env:
+          BRANCH: ${{ github.ref_name }}
+          DEPLOY_ENABLED: ${{ vars.DEPLOY_ENABLED }}
+          DEV_DEPLOY_ENABLED: ${{ vars.DEV_DEPLOY_ENABLED }}
+        run: |
+          case "$BRANCH" in
+            main)
+              environment=production; suffix=""; deploy="$DEPLOY_ENABLED" ;;
+            development)
+              environment=development; suffix="-dev"; deploy="$DEV_DEPLOY_ENABLED" ;;
+            *)
+              echo "::error::Only main and development build images (got '$BRANCH')."
+              exit 1 ;;
+          esac
+          {
+            echo "environment=$environment"
+            echo "suffix=$suffix"
+            echo "web_url=https://calendar${suffix}.rothblueprint.com"
+            echo "api_url=https://calendar-api${suffix}.rothblueprint.com"
+            echo "deploy=$([[ "$deploy" == "true" ]] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+
+  checks:
+    name: Checks
+    uses: ./.github/workflows/checks.yml
+
   build-web:
     name: Build web image
+    needs: [target, checks]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -65,16 +118,18 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ${{ steps.image.outputs.tag }}
-          cache-from: type=gha,scope=web
-          cache-to: type=gha,mode=max,scope=web
+          # Per-branch cache: the inlined API URL differs between branches.
+          cache-from: type=gha,scope=web-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=web-${{ github.ref_name }}
           build-args: |
-            NEXT_PUBLIC_WEBAPP_URL=https://calendar.rothblueprint.com
-            NEXT_PUBLIC_API_V2_URL=https://calendar-api.rothblueprint.com/v2
+            NEXT_PUBLIC_WEBAPP_URL=${{ needs.target.outputs.web_url }}
+            NEXT_PUBLIC_API_V2_URL=${{ needs.target.outputs.api_url }}/v2
             DATABASE_URL=postgresql://user:pass@localhost:5432/db
             CALCOM_TELEMETRY_DISABLED=1
 
   build-api:
     name: Build api image
+    needs: [target, checks]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -116,10 +171,13 @@ jobs:
             DATABASE_DIRECT_URL=postgresql://user:pass@localhost:5432/db
 
   deploy:
-    name: Deploy to ECS
-    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
-    needs: [build-web, build-api]
+    name: Deploy to ${{ needs.target.outputs.environment }}
+    if: ${{ needs.target.outputs.deploy == 'true' }}
+    needs: [target, build-web, build-api]
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ needs.target.outputs.environment }}
+      url: ${{ needs.target.outputs.web_url }}
     permissions:
       id-token: write
       contents: read
@@ -136,6 +194,10 @@ jobs:
         env:
           AWS_REGION: us-west-2
           CLUSTER: rbp-fargate
+          FAMILY_WEB: rbp-cal-web${{ needs.target.outputs.suffix }}
+          FAMILY_API: rbp-cal-api${{ needs.target.outputs.suffix }}
+          SERVICE_WEB: cal-web${{ needs.target.outputs.suffix }}
+          SERVICE_API: cal-api${{ needs.target.outputs.suffix }}
           WEB_IMAGE: ${{ needs.build-web.outputs.image }}
           WEB_DIGEST: ${{ needs.build-web.outputs.digest }}
           API_IMAGE: ${{ needs.build-api.outputs.image }}
