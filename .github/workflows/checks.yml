@@ -1,0 +1,59 @@
+name: Checks
+
+# Required status checks for the branch rules on `development` and `main`,
+# and the gate the deploy pipeline runs before building images.
+#
+#   source-branch  PRs into main must come from development. GitHub rulesets
+#                  cannot restrict a PR's head branch, so this check does it.
+#   unit-tests     Booking-form and webhook payload tests covering the fork's
+#                  customisations (phone validation, smsConsent, responses).
+
+on:
+  pull_request:
+    branches: [development, main]
+  workflow_call: {}
+
+permissions:
+  contents: read
+
+jobs:
+  source-branch:
+    name: PR source branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only development may merge into main
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          if [[ "$BASE" == "main" && "$HEAD" != "development" ]]; then
+            echo "::error::Pull requests into main must come from development (got '$HEAD')."
+            exit 1
+          fi
+          echo "ok: ${HEAD:-push} -> ${BASE:-n/a}"
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: corepack enable
+
+      - uses: actions/cache@v4
+        with:
+          path: .yarn/cache
+          key: yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: yarn-${{ runner.os }}-
+
+      - run: yarn install --immutable
+
+      - name: Booking and webhook tests
+        run: >-
+          TZ=UTC yarn vitest run
+          packages/features/bookings/lib/getBookingResponsesSchema.test.ts
+          packages/features/webhooks/lib/factory/versioned/v2021-10-20/BookingPayloadBuilder.test.ts

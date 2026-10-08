@@ -15,20 +15,20 @@
 #   API_DIGEST        sha256:...
 #   MIGRATE_SUBNETS   comma-separated private subnet ids
 #   MIGRATE_SG        cal tasks security group id
+#   FAMILY_WEB        task definition family (rbp-cal-web, rbp-cal-web-dev)
+#   FAMILY_API        task definition family (rbp-cal-api, rbp-cal-api-dev)
+#   SERVICE_WEB       ECS service (cal-web, cal-web-dev)
+#   SERVICE_API       ECS service (cal-api, cal-api-dev)
 #
-# Families/services are fixed: rbp-cal-web/cal-web, rbp-cal-api/cal-api.
-# Idempotent; safe to re-run after partial failure.
+# No defaults on purpose: a missing name must fail, not fall back to
+# production. Idempotent; safe to re-run after partial failure.
 
 set -euo pipefail
 
 : "${AWS_REGION:?}" "${CLUSTER:?}"
 : "${WEB_IMAGE:?}" "${WEB_DIGEST:?}" "${API_IMAGE:?}" "${API_DIGEST:?}"
 : "${MIGRATE_SUBNETS:?}" "${MIGRATE_SG:?}"
-
-FAMILY_WEB=rbp-cal-web
-FAMILY_API=rbp-cal-api
-SERVICE_WEB=cal-web
-SERVICE_API=cal-api
+: "${FAMILY_WEB:?}" "${FAMILY_API:?}" "${SERVICE_WEB:?}" "${SERVICE_API:?}"
 
 pin() { echo "${1%:*}@${2}"; }
 WEB_PINNED=$(pin "$WEB_IMAGE" "$WEB_DIGEST")
@@ -85,7 +85,7 @@ EXIT=$(echo "$DESC" | jq -r '.tasks[0].containers[0].exitCode // "null"')
 REASON=$(echo "$DESC" | jq -r '.tasks[0].stoppedReason // "-"')
 echo "    exitCode=$EXIT reason=$REASON"
 if [[ "$EXIT" != "0" ]]; then
-  echo "::error::Migration exited $EXIT - aborting. Logs: /ecs/rbp/cal-api"
+  echo "::error::Migration exited $EXIT - aborting. Logs: /ecs/rbp/$SERVICE_API"
   exit 1
 fi
 
