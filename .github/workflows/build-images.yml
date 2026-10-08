@@ -6,7 +6,7 @@ name: Build & Deploy
 #   ghcr.io/rothblueprint/rbp-cal-api:<branch>  (NestJS API v2, port 5555)
 #
 # Branch -> environment (CalendarStack / CalendarEnvironment in the rbp infra):
-#   development -> development  calendar-dev.rothblueprint.com, cal-*-dev
+#   development -> development  calendar-beta.rothblueprint.com, cal-*-dev
 #   main        -> production   calendar.rothblueprint.com,     cal-*
 #
 # Deploys go through the GitHub Environment of the same name. `production`
@@ -62,9 +62,9 @@ jobs:
         run: |
           case "$BRANCH" in
             main)
-              environment=production; suffix=""; deploy="$DEPLOY_ENABLED" ;;
+              environment=production; suffix=""; host_suffix=""; deploy="$DEPLOY_ENABLED" ;;
             development)
-              environment=development; suffix="-dev"; deploy="$DEV_DEPLOY_ENABLED" ;;
+              environment=development; suffix="-dev"; host_suffix="-beta"; deploy="$DEV_DEPLOY_ENABLED" ;;
             *)
               echo "::error::Only main and development build images (got '$BRANCH')."
               exit 1 ;;
@@ -72,8 +72,8 @@ jobs:
           {
             echo "environment=$environment"
             echo "suffix=$suffix"
-            echo "web_url=https://calendar${suffix}.rothblueprint.com"
-            echo "api_url=https://calendar-api${suffix}.rothblueprint.com"
+            echo "web_url=https://calendar${host_suffix}.rothblueprint.com"
+            echo "api_url=https://calendar-api${host_suffix}.rothblueprint.com"
             echo "deploy=$([[ "$deploy" == "true" ]] && echo true || echo false)"
           } >> "$GITHUB_OUTPUT"
 

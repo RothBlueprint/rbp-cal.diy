@@ -20,8 +20,20 @@ import { TRPCExceptionFilter } from "./filters/trpc-exception.filter";
 import { HttpExceptionFilter } from "@/filters/http-exception.filter";
 import { PrismaExceptionFilter } from "@/filters/prisma-exception.filter";
 import { ZodExceptionFilter } from "@/filters/zod-exception.filter";
+import { isOriginAllowed } from "@/lib/is-origin-allowed/is-origin-allowed";
 
 const logger: Logger = new Logger("Bootstrap");
+
+// Comma-separated origins, wildcards allowed (e.g. "https://*.rothblueprint.com").
+// Unset keeps the stock behaviour of allowing every origin.
+function corsOrigin(): string | ((origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => void) {
+  const allowed = (process.env.API_CORS_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (!allowed.length) return "*";
+  return (origin, cb) => cb(null, !origin || isOriginAllowed(origin, allowed));
+}
 
 export const bootstrap = (app: NestExpressApplication): NestExpressApplication => {
   try {
@@ -41,7 +53,7 @@ export const bootstrap = (app: NestExpressApplication): NestExpressApplication =
     });
     app.use(helmet());
     app.enableCors({
-      origin: "*",
+      origin: corsOrigin(),
       methods: ["GET", "PATCH", "DELETE", "HEAD", "POST", "PUT", "OPTIONS"],
       allowedHeaders: [
         X_CAL_CLIENT_ID,

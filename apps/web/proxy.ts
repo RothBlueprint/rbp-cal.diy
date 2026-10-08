@@ -119,6 +119,13 @@ const embeds = {
       res.headers.set("x-embedColorScheme", embedColorScheme);
     }
 
+    // Space-separated CSP sources, e.g. "https://*.rothblueprint.com". Unset lets
+    // any site frame the embed, as stock.
+    const frameAncestors = process.env.EMBED_FRAME_ANCESTORS?.trim();
+    if (frameAncestors) {
+      res.headers.set("Content-Security-Policy", `frame-ancestors 'self' ${frameAncestors}`);
+    }
+
     res.headers.set("x-isEmbed", "true");
     return res;
   },
