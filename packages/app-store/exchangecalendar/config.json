@@ -9,7 +9,7 @@
   "url": "https://cal.com",
   "variant": "calendar",
   "categories": ["calendar"],
-  "publisher": "Cal.diy",
+  "publisher": "RothBlueprint",
   "email": "help@cal.com",
   "description": "Fetch Microsoft Exchange calendars and availabilities using Exchange Web Services (EWS).",
   "__createdUsingCli": true,

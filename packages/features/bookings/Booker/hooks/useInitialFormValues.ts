@@ -24,6 +24,14 @@ type UseInitialFormValuesProps = {
   clientId?: string;
 };
 
+function initialResponseValue(field: { name: string }, raw: unknown) {
+  if (raw === true || raw === false) return raw;
+  if (raw) return raw;
+  // An untouched consent box still submits false. Other empty fields stay unset.
+  if (field.name === "smsConsent") return false;
+  return undefined;
+}
+
 // Add this stable hash function
 function getStableHash(obj: Record<string, string | string[]>) {
   return Object.entries(obj)
@@ -150,7 +158,7 @@ export function useInitialFormValues({
         const responses = eventType.bookingFields.reduce((responses, field) => {
           return {
             ...responses,
-            [field.name]: parsedQuery[field.name] || undefined,
+            [field.name]: initialResponseValue(field, parsedQuery[field.name]),
           };
         }, {});
 
@@ -180,7 +188,7 @@ export function useInitialFormValues({
       const responses = eventType.bookingFields.reduce((responses, field) => {
         return {
           ...responses,
-          [field.name]: bookingData?.responses[field.name],
+          [field.name]: initialResponseValue(field, bookingData?.responses[field.name]),
         };
       }, {});
       defaults.responses = {

@@ -4,6 +4,7 @@ import { Icon } from "@calcom/ui/components/icon";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { CalendarServiceLogo } from "./calendar-logos";
 import { RbpAppointmentSheet } from "./RbpAppointmentSheet";
 
 type CalendarLink = { label: string; href: string; download?: string };
@@ -131,7 +132,7 @@ export const RbpBookedCard = ({
                 target={link.download ? undefined : "_blank"}
                 download={link.download}
                 className="bg-default text-emphasis border-subtle hover:border-brand-default flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-xl border bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0)_75%)] px-2 text-sm font-medium shadow-[0_1px_1px_rgba(60,45,20,0.06),0_6px_12px_-8px_rgba(60,45,20,0.30)] transition-[transform,border-color] duration-150 hover:-translate-y-px active:scale-[0.97] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_1px_1px_rgba(0,0,0,0.4),0_8px_14px_-8px_rgba(0,0,0,0.65)]">
-                <Icon name="calendar" className="text-subtle hidden h-4 w-4 shrink-0 min-[400px]:block" aria-hidden="true" />
+                <CalendarServiceLogo label={link.label} />
                 {link.label}
               </Link>
             ))}

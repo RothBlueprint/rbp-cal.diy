@@ -660,9 +660,53 @@ describe("getBookingResponsesSchema", () => {
       const parsedResponses = await schema.safeParseAsync({
         name: "John",
         email: "",
-        attendeePhoneNumber: "+919999999999",
+        attendeePhoneNumber: "+16025551234",
       });
       expect(parsedResponses.success).toBe(true);
+    });
+
+    test.each([
+      ["+16025551234", true],
+      ["+14165550123", true],
+      ["+525512345678", true],
+      ["+919999999999", false],
+    ])("attendeePhoneNumber North America only: %s", async (phone, allowed) => {
+      const schema = getBookingResponsesSchema({
+        bookingFields: [
+          {
+            name: "name",
+            type: "name",
+            required: true,
+          },
+          {
+            name: "email",
+            type: "email",
+            required: true,
+          },
+          {
+            name: "attendeePhoneNumber",
+            type: "phone",
+            required: true,
+          },
+        ] as z.infer<typeof eventTypeBookingFields> & z.BRAND<"HAS_SYSTEM_FIELDS">,
+        view: "ALL_VIEWS",
+      });
+      const parsedResponses = await schema.safeParseAsync({
+        name: "John",
+        email: "john@example.com",
+        attendeePhoneNumber: phone,
+      });
+      if (allowed) {
+        expect(parsedResponses.success).toBe(true);
+        return;
+      }
+      expectParsingToFail(
+        parsedResponses,
+        expect.objectContaining({
+          code: "custom",
+          message: "{attendeePhoneNumber}invalid_number",
+        })
+      );
     });
 
     describe("excluded email/domain validation", () => {

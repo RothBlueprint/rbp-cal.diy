@@ -84,7 +84,7 @@ export function EditUserSheet({
                 <div className="stack-y-4 mb-4 flex flex-col">
                   <h3 className="mb-1 font-semibold text-base text-emphasis">{t("profile")}</h3>
                   <DisplayInfo
-                    label="Cal"
+                    label="RothBlueprint"
                     value={removeProtocol(`${WEBAPP_URL}/${loadedUser?.username}`)}
                     icon="external-link"
                   />

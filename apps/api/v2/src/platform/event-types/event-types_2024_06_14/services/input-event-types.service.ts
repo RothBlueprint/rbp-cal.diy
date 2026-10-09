@@ -18,6 +18,10 @@ import { BookerLayouts } from "@calcom/prisma/zod-utils";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConnectedCalendarsData } from "@/platform/calendars/outputs/connected-calendars.output";
 import { CalendarsService } from "@/platform/calendars/services/calendars.service";
+import {
+  INTRO_SMS_CONSENT_NAME,
+  introSmsConsentField,
+} from "@/platform/event-types/intro-booking-fields";
 import { EventTypesRepository_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.repository";
 import { InputEventTransformed_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/transformed";
 import {
@@ -32,6 +36,7 @@ import {
   systemBeforeFieldEmail,
   systemBeforeFieldLocation,
   systemBeforeFieldName,
+  systemBeforeFieldPhone,
   transformBookerLayoutsApiToInternal,
   transformBookingFieldsApiToInternal,
   transformConfirmationPolicyApiToInternal,
@@ -335,6 +340,8 @@ export class InputEventTypesService_2024_06_14 {
 
     const systemCustomNameField = systemCustomFields?.find((field) => field.type === "name");
     const systemCustomEmailField = systemCustomFields?.find((field) => field.type === "email");
+    const systemCustomPhoneField = internalFields.find((field) => field.name === "attendeePhoneNumber");
+    const systemCustomSmsField = internalFields.find((field) => field.name === INTRO_SMS_CONSENT_NAME);
     const systemCustomTitleField = systemCustomFields?.find((field) => field.name === "title");
     const systemCustomLocationField = systemCustomFields?.find((field) => field.name === "location");
     const systemCustomNotesField = systemCustomFields?.find((field) => field.name === "notes");
@@ -343,20 +350,43 @@ export class InputEventTypesService_2024_06_14 {
       (field) => field.name === "rescheduleReason"
     );
 
+    const userFields = userCustomFields.filter(
+      (field) => field.name !== "attendeePhoneNumber" && field.name !== INTRO_SMS_CONSENT_NAME
+    );
+
+    const phoneField: SystemField = {
+      ...systemBeforeFieldPhone,
+      required: true,
+      hidden: false,
+      ...(systemCustomPhoneField && "label" in systemCustomPhoneField && systemCustomPhoneField.label
+        ? { label: systemCustomPhoneField.label }
+        : {}),
+    };
+    const smsField: CustomField = {
+      ...introSmsConsentField,
+      ...(systemCustomSmsField && "label" in systemCustomSmsField && systemCustomSmsField.label
+        ? { label: systemCustomSmsField.label }
+        : {}),
+      required: false,
+      hidden: false,
+    };
+
     const defaultFieldsBefore: (SystemField | CustomField)[] = [
       systemCustomNameField || systemBeforeFieldName,
       systemCustomEmailField || systemBeforeFieldEmail,
+      phoneField,
+      smsField,
       systemCustomLocationField || systemBeforeFieldLocation,
     ];
 
     const defaultFieldsAfter = [
       systemCustomTitleField || systemAfterFieldTitle,
       systemCustomNotesField || systemAfterFieldNotes,
-      systemCustomGuestsField || systemAfterFieldGuests,
+      systemCustomGuestsField || { ...systemAfterFieldGuests, hidden: true },
       systemCustomRescheduleReasonField || systemAfterFieldRescheduleReason,
     ];
 
-    const bookingFields = [...defaultFieldsBefore, ...userCustomFields, ...defaultFieldsAfter];
+    const bookingFields = [...defaultFieldsBefore, ...userFields, ...defaultFieldsAfter];
 
     if (!this.hasEmailOrPhoneOnlySetup(bookingFields)) {
       throw new BadRequestException(

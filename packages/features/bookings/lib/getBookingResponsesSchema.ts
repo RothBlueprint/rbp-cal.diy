@@ -4,7 +4,7 @@ import { dbReadResponseSchema } from "@calcom/lib/dbReadResponseSchema";
 import logger from "@calcom/lib/logger";
 import type { eventTypeBookingFields } from "@calcom/prisma/zod-utils";
 import { bookingResponses, emailSchemaRefinement } from "@calcom/prisma/zod-utils";
-import { isValidPhoneNumber } from "libphonenumber-js/max";
+import { isValidPhoneNumber, parsePhoneNumberFromString } from "libphonenumber-js/max";
 import z from "zod";
 
 type View = ALL_VIEWS | (string & {});
@@ -109,6 +109,15 @@ async function superRefineField({
   const phoneSchema = isPartialSchema
     ? z.string()
     : z.string().refine(async (val) => {
+        // Intro bookings collect North American numbers: the +1 plan (US,
+        // Canada, and other NANP countries) and Mexico. isValidPhoneNumber's
+        // country argument does not reject a number that already has a
+        // different calling code, so check the parsed number. Other phone
+        // fields stay international.
+        if (field.name === "attendeePhoneNumber") {
+          const parsed = parsePhoneNumberFromString(val);
+          return !!parsed?.isValid() && (parsed.countryCallingCode === "1" || parsed.countryCallingCode === "52");
+        }
         return isValidPhoneNumber(val);
       });
   // Tag the message with the input name so that the message can be shown at appropriate place

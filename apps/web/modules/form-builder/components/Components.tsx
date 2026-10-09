@@ -203,6 +203,7 @@ export const Components: Record<FieldType, Component> = {
             setValue(val);
           }}
           {...props}
+          allowedCountries={props.name === "attendeePhoneNumber" ? ["us", "ca", "mx"] : undefined}
         />
       );
     },

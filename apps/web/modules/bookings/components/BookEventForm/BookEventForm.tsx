@@ -7,7 +7,10 @@ import { formatEventFromTime } from "@calcom/features/bookings/Booker/utils/date
 import type { BookerEvent } from "@calcom/features/bookings/types";
 import dayjs from "@calcom/dayjs";
 import ServerTrans from "@calcom/lib/components/ServerTrans";
-import { WEBSITE_PRIVACY_POLICY_URL, WEBSITE_TERMS_URL } from "@calcom/lib/constants";
+import {
+  WEBSITE_PRIVACY_POLICY_URL,
+  WEBSITE_TERMS_URL,
+} from "@calcom/lib/constants";
 import { ErrorCode } from "@calcom/lib/errorCodes";
 import { useCompatSearchParams } from "@calcom/lib/hooks/useCompatSearchParams";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
@@ -21,7 +24,10 @@ import type { TFunction } from "i18next";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { FieldError } from "react-hook-form";
-import type { IUseBookingErrors, IUseBookingLoadingStates } from "../../hooks/useBookings";
+import type {
+  IUseBookingErrors,
+  IUseBookingLoadingStates,
+} from "../../hooks/useBookings";
 import { RbpAppointmentSheet } from "../RbpAppointmentSheet";
 import { BookingFields } from "./BookingFields";
 import { FormSkeleton } from "./Skeleton";
@@ -68,7 +74,15 @@ export const BookEventForm = ({
   eventQuery: {
     isError: boolean;
     isPending: boolean;
-    data?: Pick<BookerEvent, "price" | "currency" | "metadata" | "bookingFields" | "locations" | "length"> | null;
+    data?: Pick<
+      BookerEvent,
+      | "price"
+      | "currency"
+      | "metadata"
+      | "bookingFields"
+      | "locations"
+      | "length"
+    > | null;
   };
 }) => {
   const eventType = eventQuery.data;
@@ -78,7 +92,9 @@ export const BookEventForm = ({
   const username = useBookerStoreContext((state) => state.username);
   const isPlatformBookerEmbed = useIsPlatformBookerEmbed();
   const { timeFormat, timezone } = useBookerTime();
-  const selectedDuration = useBookerStoreContext((state) => state.selectedDuration);
+  const selectedDuration = useBookerStoreContext(
+    (state) => state.selectedDuration
+  );
   const searchParams = useCompatSearchParams();
   // rbp: the funnel already has the lead's name and email (the result page
   // prefills both), so they fold into one "Booking as" line. The inputs stay
@@ -92,7 +108,11 @@ export const BookEventForm = ({
   const isPaidEvent = useMemo(() => {
     if (!eventType?.price) return false;
     const paymentAppData = getPaymentAppData(eventType);
-    return eventType?.price > 0 && !Number.isNaN(paymentAppData.price) && paymentAppData.price > 0;
+    return (
+      eventType?.price > 0 &&
+      !Number.isNaN(paymentAppData.price) &&
+      paymentAppData.price > 0
+    );
   }, [eventType]);
 
   const paymentCurrency = useMemo(() => {
@@ -100,7 +120,8 @@ export const BookEventForm = ({
     return getPaymentAppData(eventType)?.currency || "USD";
   }, [eventType]);
 
-  if (eventQuery.isError) return <Alert severity="warning" message={t("error_booking_event")} />;
+  if (eventQuery.isError)
+    return <Alert severity="warning" message={t("error_booking_event")} />;
   if (eventQuery.isPending || !eventQuery.data) return <FormSkeleton />;
   if (!timeslot)
     return (
@@ -121,22 +142,39 @@ export const BookEventForm = ({
   const watchedCfToken = bookingForm.watch("cfToken");
 
   const isRescheduleView = !!(rescheduleUid && bookingData);
-  const responses = (bookingForm.watch("responses") || {}) as Record<string, unknown>;
-  const nameResponse = responses.name as string | { firstName?: string; lastName?: string } | undefined;
+  const responses = (bookingForm.watch("responses") || {}) as Record<
+    string,
+    unknown
+  >;
+  const nameResponse = responses.name as
+    | string
+    | { firstName?: string; lastName?: string }
+    | undefined;
   const bookingName =
     typeof nameResponse === "string"
       ? nameResponse
-      : [nameResponse?.firstName, nameResponse?.lastName].filter(Boolean).join(" ");
-  const bookingEmail = typeof responses.email === "string" ? responses.email : "";
+      : [nameResponse?.firstName, nameResponse?.lastName]
+          .filter(Boolean)
+          .join(" ");
+  const bookingEmail =
+    typeof responses.email === "string" ? responses.email : "";
   const responsesError = bookingForm.formState.errors.responses as
     | { message?: string; name?: unknown; email?: unknown }
     | undefined;
   const identityInvalid =
     !!responsesError &&
-    (!!responsesError.name || !!responsesError.email || /^\{(name|email)\}/.test(responsesError.message ?? ""));
-  const identityPrefilled = !!(searchParams?.get("name") && searchParams?.get("email"));
+    (!!responsesError.name ||
+      !!responsesError.email ||
+      /^\{(name|email)\}/.test(responsesError.message ?? ""));
+  const identityPrefilled = !!(
+    searchParams?.get("name") && searchParams?.get("email")
+  );
   const identityFolded =
-    identityPrefilled && !!bookingName && !!bookingEmail && !identityOpen && !identityInvalid;
+    identityPrefilled &&
+    !!bookingName &&
+    !!bookingEmail &&
+    !identityOpen &&
+    !identityInvalid;
 
   return (
     <div className="flex flex-col h-full">
@@ -151,7 +189,8 @@ export const BookEventForm = ({
         }}
         form={bookingForm}
         handleSubmit={onSubmit}
-        noValidate>
+        noValidate
+      >
         <AppointmentRecap
           timeslot={timeslot}
           duration={selectedDuration || eventType.length}
@@ -164,12 +203,16 @@ export const BookEventForm = ({
           <div className="mb-5 flex items-center gap-3">
             <span
               aria-hidden="true"
-              className="bg-muted text-emphasis flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold shadow-[inset_0_1px_2px_rgba(60,45,20,0.12)] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)]">
+              className="bg-muted text-emphasis flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold shadow-[inset_0_1px_2px_rgba(60,45,20,0.12)] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)]"
+            >
               {bookingName.trim().charAt(0).toUpperCase()}
             </span>
             <div className="min-w-0 flex-1 text-sm leading-snug">
               <p className="text-subtle">
-                Booking as <span className="text-emphasis font-semibold">{bookingName}</span>
+                Booking as{" "}
+                <span className="text-emphasis font-semibold">
+                  {bookingName}
+                </span>
               </p>
               <p className="text-subtle truncate">{bookingEmail}</p>
             </div>
@@ -177,7 +220,8 @@ export const BookEventForm = ({
               <button
                 type="button"
                 onClick={() => setIdentityOpen(true)}
-                className="text-emphasis hover:bg-muted -mr-2 shrink-0 rounded-lg px-3 py-2.5 text-sm font-medium underline-offset-4 hover:underline">
+                className="text-emphasis hover:bg-muted -mr-2 shrink-0 rounded-lg px-3 py-2.5 text-sm font-medium underline-offset-4 hover:underline"
+              >
                 Edit
               </button>
             )}
@@ -194,7 +238,8 @@ export const BookEventForm = ({
             "dark:[&_input]:shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)] dark:[&_textarea]:shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)]",
             "[&_input:focus]:border-brand-default [&_textarea:focus]:border-brand-default",
             "[&_input:focus]:shadow-[0_0_0_3px_color-mix(in_srgb,var(--cal-brand)_22%,transparent)] [&_textarea:focus]:shadow-[0_0_0_3px_color-mix(in_srgb,var(--cal-brand)_22%,transparent)]"
-          )}>
+          )}
+        >
           <BookingFields
             isDynamicGroupBooking={!!(username && username.indexOf("+") > -1)}
             fields={eventType.bookingFields}
@@ -238,7 +283,8 @@ export const BookEventForm = ({
                       key="please-select-a-new-time-button"
                       type="button"
                       className="underline"
-                      onClick={onCancel}>
+                      onClick={onCancel}
+                    >
                       Please select a new time
                     </button>,
                   ]}
@@ -253,14 +299,19 @@ export const BookEventForm = ({
         {!isPlatform && (
           <p className="text-subtle mb-4 mt-1 w-full text-xs">
             By booking, you agree to our{" "}
-            <Link className="text-emphasis underline-offset-2 hover:underline" href={WEBSITE_TERMS_URL} target="_blank">
+            <Link
+              className="text-emphasis underline-offset-2 hover:underline"
+              href={WEBSITE_TERMS_URL}
+              target="_blank"
+            >
               Terms
             </Link>{" "}
             and{" "}
             <Link
               className="text-emphasis underline-offset-2 hover:underline"
               href={WEBSITE_PRIVACY_POLICY_URL}
-              target="_blank">
+              target="_blank"
+            >
               Privacy Policy
             </Link>
             .
@@ -274,7 +325,8 @@ export const BookEventForm = ({
               className="text-emphasis hover:underline"
               key="terms"
               href={`${WEBSITE_TERMS_URL}`}
-              target="_blank">
+              target="_blank"
+            >
               {t("terms")}
             </Link>{" "}
             {t("and")}{" "}
@@ -282,38 +334,52 @@ export const BookEventForm = ({
               className="text-emphasis hover:underline"
               key="privacy"
               href={`${WEBSITE_PRIVACY_POLICY_URL}`}
-              target="_blank">
+              target="_blank"
+            >
               {t("privacy_policy")}
             </Link>
             .
           </div>
         )}
         {/* rbp: one full-width primary. Back is "Change" on the recap above. */}
-        <div className="mt-auto modalsticky">
-          <Button
-            type="submit"
-            color="primary"
-            disabled={
-              (!!shouldRenderCaptcha && !watchedCfToken) || isTimeslotUnavailable || confirmButtonDisabled
-            }
-            loading={
-              loadingStates.creatingBooking ||
-              loadingStates.creatingRecurringBooking ||
-              isVerificationCodeSending
-            }
-            className={classNames(
-              "h-12 w-full justify-center rounded-[11px] text-[15px] font-semibold enabled:shadow-[0_8px_18px_-6px_color-mix(in_srgb,var(--cal-brand)_55%,transparent),inset_0_1px_0_rgba(255,255,255,0.25)]",
-              customClassNames?.confirmButton
-            )}
-            data-testid={rescheduleUid && bookingData ? "confirm-reschedule-button" : "confirm-book-button"}>
-            {rescheduleUid && bookingData
-              ? "Move my appointment"
-              : renderConfirmNotVerifyEmailButtonCond
+        <div className="mt-auto">
+          <SmsConsentCheckbox
+            bookingForm={bookingForm}
+            fields={eventType.bookingFields}
+          />
+          <div className="modalsticky">
+            <Button
+              type="submit"
+              color="primary"
+              disabled={
+                (!!shouldRenderCaptcha && !watchedCfToken) ||
+                isTimeslotUnavailable ||
+                confirmButtonDisabled
+              }
+              loading={
+                loadingStates.creatingBooking ||
+                loadingStates.creatingRecurringBooking ||
+                isVerificationCodeSending
+              }
+              className={classNames(
+                "h-12 w-full justify-center rounded-[11px] text-[15px] font-semibold enabled:shadow-[0_8px_18px_-6px_color-mix(in_srgb,var(--cal-brand)_55%,transparent),inset_0_1px_0_rgba(255,255,255,0.25)]",
+                customClassNames?.confirmButton
+              )}
+              data-testid={
+                rescheduleUid && bookingData
+                  ? "confirm-reschedule-button"
+                  : "confirm-book-button"
+              }
+            >
+              {rescheduleUid && bookingData
+                ? "Move my appointment"
+                : renderConfirmNotVerifyEmailButtonCond
                 ? isPaidEvent
                   ? t("pay_and_book")
                   : "Confirm appointment"
                 : t("verify_email_button")}
-          </Button>
+            </Button>
+          </div>
         </div>
       </Form>
     </div>
@@ -354,7 +420,8 @@ const AppointmentRecap = ({
               type="button"
               onClick={onChange}
               data-testid="back"
-              className="text-emphasis hover:bg-muted -my-2 -mr-2 rounded-lg px-3 py-2 text-sm font-medium underline-offset-4 hover:underline">
+              className="text-emphasis hover:bg-muted -my-2 -mr-2 rounded-lg px-3 py-2 text-sm font-medium underline-offset-4 hover:underline"
+            >
               Change
             </button>
           )
@@ -363,6 +430,42 @@ const AppointmentRecap = ({
     </div>
   );
 };
+
+function SmsConsentCheckbox({
+  bookingForm,
+  fields,
+}: {
+  bookingForm: UseBookingFormReturnType["bookingForm"];
+  fields: BookerEvent["bookingFields"] | undefined;
+}) {
+  const field = fields?.find(
+    (item) =>
+      item.name === "smsConsent" && item.type === "boolean" && !item.hidden
+  );
+  const label = field && "label" in field ? field.label : undefined;
+  if (!label) return null;
+  const checked = bookingForm.watch("responses.smsConsent") === true;
+
+  return (
+    <label
+      htmlFor="smsConsent"
+      className="mb-3 flex w-full cursor-pointer items-start gap-2 text-xs leading-snug text-subtle"
+    >
+      <input
+        id="smsConsent"
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => {
+          bookingForm.setValue("responses.smsConsent", event.target.checked, {
+            shouldDirty: true,
+          });
+        }}
+        className="border-default bg-default text-emphasis mt-px h-3.5 w-3.5 shrink-0 rounded-[4px] focus:ring-0"
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
 
 const getError = ({
   globalError,
@@ -407,7 +510,9 @@ const getError = ({
   }
 
   const messageKey =
-    error.message === ErrorCode.BookerLimitExceeded ? "booker_upcoming_limit_reached" : error.message;
+    error.message === ErrorCode.BookerLimitExceeded
+      ? "booker_upcoming_limit_reached"
+      : error.message;
 
   return error?.message ? (
     <>
@@ -415,7 +520,9 @@ const getError = ({
       {error.data?.traceId && (
         <div className="mt-2 text-xs text-subtle">
           <span className="font-medium">{t("trace_reference_id")}:</span>
-          <code className="ml-1 font-mono break-all select-all">{error.data.traceId}</code>
+          <code className="ml-1 font-mono break-all select-all">
+            {error.data.traceId}
+          </code>
         </div>
       )}
     </>

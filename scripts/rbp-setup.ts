@@ -35,7 +35,9 @@ dotenv.config();
 dotenv.config({ path: "../../.env" });
 
 import process from "node:process";
+import { introBookingFields } from "../apps/api/v2/src/platform/event-types/intro-booking-fields";
 import prisma from "@calcom/prisma";
+import type { Prisma } from "@calcom/prisma/client";
 import { SchedulingType, WebhookTriggerEvents } from "@calcom/prisma/enums";
 
 const POOL_COUNT = Number(process.env.RBP_POOL_COUNT ?? 1);
@@ -89,6 +91,7 @@ async function ensurePool(index: number) {
         // Instant ACCEPTED bookings: confirmation flows drop metadata (incl. leadId)
         // from the BOOKING_CREATED webhook payload and complicate quota counting.
         requiresConfirmation: false,
+        bookingFields: introBookingFields() as Prisma.InputJsonValue,
         team: { connect: { id: team.id } },
       },
       select: { id: true },
@@ -330,6 +333,47 @@ async function reconcileUserScopedWebhooks(userId: number, webhookUrl: string) {
   }
 }
 
+/**
+ * Every intro event type — pool and personal — collects name, email, a required
+ * phone (`attendeePhoneNumber`), optional notes, and an unchecked SMS consent
+ * checkbox. Empty `bookingFields` makes Cal inject phone as hidden, so the
+ * form never asks and Django never sees a number.
+ *
+ * Re-run updates existing rows. Unknown extra questions already stored on an
+ * intro event type are kept after the canonical fields.
+ */
+async function ensureIntroBookingFields() {
+  const canonical = introBookingFields();
+  const canonicalNames = new Set(canonical.map((field) => field.name));
+  const eventTypes = await prisma.eventType.findMany({
+    where: { slug: EVENT_SLUG },
+    select: { id: true, teamId: true, userId: true, bookingFields: true },
+    orderBy: { id: "asc" },
+  });
+
+  console.log(`\nintro booking fields (${eventTypes.length} event type${eventTypes.length === 1 ? "" : "s"}):`);
+
+  for (const eventType of eventTypes) {
+    const existing = Array.isArray(eventType.bookingFields) ? eventType.bookingFields : [];
+    const extras = existing.filter((field) => {
+      if (!field || typeof field !== "object" || Array.isArray(field)) return false;
+      const name = "name" in field ? field.name : undefined;
+      return typeof name === "string" && !canonicalNames.has(name);
+    });
+    const next = [...canonical, ...extras];
+    if (JSON.stringify(eventType.bookingFields) === JSON.stringify(next)) {
+      console.log(`  eventType ${eventType.id}: already set`);
+      continue;
+    }
+    await prisma.eventType.update({
+      where: { id: eventType.id },
+      data: { bookingFields: next as Prisma.InputJsonValue },
+    });
+    const owner = eventType.teamId ? `team ${eventType.teamId}` : `user ${eventType.userId}`;
+    console.log(`  eventType ${eventType.id} (${owner}): booking fields updated`);
+  }
+}
+
 async function ensureSignupDisabled() {
   // NEXT_PUBLIC_DISABLE_SIGNUP cannot do this: Next.js inlines NEXT_PUBLIC_*
   // during `next build`, so setting it at runtime (e.g. in an ECS task
@@ -352,6 +396,7 @@ async function ensureSignupDisabled() {
 
 async function main() {
   await ensureSignupDisabled();
+  await ensureIntroBookingFields();
   const pools = [];
   for (let i = 1; i <= POOL_COUNT; i++) {
     pools.push(await ensurePool(i));

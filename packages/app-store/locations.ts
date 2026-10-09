@@ -109,7 +109,7 @@ export const defaultLocations: DefaultEventLocationType[] = [
     label: "in_person_attendee_address",
     variable: "address",
     organizerInputType: null,
-    messageForOrganizer: "Cal will ask your invitee to enter an address before scheduling.",
+    messageForOrganizer: "RothBlueprint will ask your invitee to enter an address before scheduling.",
     attendeeInputType: "attendeeAddress",
     attendeeInputPlaceholder: "enter_address",
     defaultValueVariable: "attendeeAddress",
@@ -124,7 +124,7 @@ export const defaultLocations: DefaultEventLocationType[] = [
     label: "custom_attendee_location",
     variable: "address",
     organizerInputType: null,
-    messageForOrganizer: "Cal will ask your invitee to enter any location before scheduling.",
+    messageForOrganizer: "RothBlueprint will ask your invitee to enter any location before scheduling.",
     attendeeInputType: "somewhereElse",
     attendeeInputPlaceholder: "any_location",
     defaultValueVariable: "somewhereElse",
@@ -182,7 +182,7 @@ export const defaultLocations: DefaultEventLocationType[] = [
     attendeeInputType: "phone",
     attendeeInputPlaceholder: `enter_phone_number`,
     defaultValueVariable: "phone",
-    messageForOrganizer: "Cal will ask your invitee to enter a phone number before scheduling.",
+    messageForOrganizer: "RothBlueprint will ask your invitee to enter a phone number before scheduling.",
     // This isn't inputType phone because organizer doesn't need to provide it.
     // inputType: "phone"
     iconUrl: "/phone.svg",
@@ -351,7 +351,7 @@ export const getMessageForOrganizer = (location: string, t: TFunction) => {
     return t(defaultLocation.messageForOrganizer);
   }
   if (videoLocation && videoLocation.linkType !== "static" && videoLocation.type !== "integrations:zoom") {
-    return t(`Cal will provide a ${videoLocation.label} URL.`);
+    return t(`RothBlueprint will provide a ${videoLocation.label} URL.`);
   }
   return "";
 };
