@@ -343,10 +343,6 @@ export const BookEventForm = ({
         )}
         {/* rbp: one full-width primary. Back is "Change" on the recap above. */}
         <div className="mt-auto">
-          <SmsConsentCheckbox
-            bookingForm={bookingForm}
-            fields={eventType.bookingFields}
-          />
           <div className="modalsticky">
             <Button
               type="submit"
@@ -430,42 +426,6 @@ const AppointmentRecap = ({
     </div>
   );
 };
-
-function SmsConsentCheckbox({
-  bookingForm,
-  fields,
-}: {
-  bookingForm: UseBookingFormReturnType["bookingForm"];
-  fields: BookerEvent["bookingFields"] | undefined;
-}) {
-  const field = fields?.find(
-    (item) =>
-      item.name === "smsConsent" && item.type === "boolean" && !item.hidden
-  );
-  const label = field && "label" in field ? field.label : undefined;
-  if (!label) return null;
-  const checked = bookingForm.watch("responses.smsConsent") === true;
-
-  return (
-    <label
-      htmlFor="smsConsent"
-      className="mb-3 flex w-full cursor-pointer items-start gap-2 text-xs leading-snug text-subtle"
-    >
-      <input
-        id="smsConsent"
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => {
-          bookingForm.setValue("responses.smsConsent", event.target.checked, {
-            shouldDirty: true,
-          });
-        }}
-        className="border-default bg-default text-emphasis mt-px h-3.5 w-3.5 shrink-0 rounded-[4px] focus:ring-0"
-      />
-      <span>{label}</span>
-    </label>
-  );
-}
 
 const getError = ({
   globalError,

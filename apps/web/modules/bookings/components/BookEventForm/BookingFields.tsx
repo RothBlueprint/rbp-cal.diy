@@ -8,6 +8,10 @@ import getLocationOptionsForSelect from "@calcom/features/bookings/lib/getLocati
 import { fieldsThatSupportLabelAsSafeHtml } from "@calcom/features/form-builder/fieldsThatSupportLabelAsSafeHtml";
 import { fieldTypesConfigMap } from "@calcom/features/form-builder/fieldTypes";
 import { SystemField } from "@calcom/lib/bookings/SystemField";
+import {
+  WEBSITE_PRIVACY_POLICY_URL,
+  WEBSITE_TERMS_URL,
+} from "@calcom/lib/constants";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { markdownToSafeHTML } from "@calcom/lib/markdownToSafeHTML";
 import type { RouterOutputs } from "@calcom/trpc/react";
@@ -295,20 +299,86 @@ export const BookingFields = ({
           fieldWithPrice = { ...fieldWithPrice, placeholder: rbpPlaceholder };
         if (field.name === "smsConsent") return null;
 
+        const showSmsConsent =
+          field.name === "attendeePhoneNumber" &&
+          !hidden &&
+          fields.some(
+            (item) =>
+              item.name === "smsConsent" &&
+              item.type === "boolean" &&
+              !item.hidden
+          );
+
         return (
-          <FormBuilderField
-            className={foldedFields?.includes(field.name) ? "hidden" : "mb-4"}
-            field={{ ...fieldWithPrice, hidden }}
-            readOnly={readOnly}
-            key={index}
-            {...(field.name === SystemField.Enum.location && {
-              onValueChange: ({ value }) => {
-                syncPhoneFields(value);
-              },
-            })}
-          />
+          <div key={index}>
+            <FormBuilderField
+              className={
+                foldedFields?.includes(field.name)
+                  ? "hidden"
+                  : showSmsConsent
+                    ? "mb-1.5"
+                    : "mb-4"
+              }
+              field={{ ...fieldWithPrice, hidden }}
+              readOnly={readOnly}
+              {...(field.name === SystemField.Enum.location && {
+                onValueChange: ({ value }) => {
+                  syncPhoneFields(value);
+                },
+              })}
+            />
+            {showSmsConsent && <SmsConsentCheckbox />}
+          </div>
         );
       })}
     </div>
   );
 };
+
+function SmsConsentCheckbox() {
+  const { watch, setValue } = useFormContext();
+  const checked = watch("responses.smsConsent") === true;
+
+  return (
+    <label
+      htmlFor="smsConsent"
+      className="!text-muted mb-4 flex w-full cursor-pointer items-start gap-2 !text-[11px] !font-normal !leading-relaxed"
+    >
+      <input
+        id="smsConsent"
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => {
+          setValue("responses.smsConsent", event.target.checked, {
+            shouldDirty: true,
+          });
+        }}
+        className="border-muted bg-default mt-0.5 !h-3 !w-3 shrink-0 !rounded-[3px] !p-0 !px-0 !shadow-none focus:ring-0"
+      />
+      <span>
+        Yes, I agree to receive automated appointment reminders and
+        notifications from RothBlueprint at the phone number provided. Message
+        frequency varies. Msg &amp; data rates may apply. Reply STOP to cancel,
+        HELP for help. View{" "}
+        <a
+          href={WEBSITE_TERMS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:text-subtle"
+        >
+          Terms
+        </a>{" "}
+        and{" "}
+        <a
+          href={WEBSITE_PRIVACY_POLICY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:text-subtle"
+        >
+          Privacy Policy
+        </a>
+        .
+      </span>
+    </label>
+  );
+}

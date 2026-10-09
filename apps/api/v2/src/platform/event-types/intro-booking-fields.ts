@@ -11,7 +11,7 @@
 export const INTRO_SMS_CONSENT_NAME = "smsConsent";
 
 export const INTRO_SMS_CONSENT_LABEL =
-  "Yes, I would like to receive automated text messages from RothBlueprint to remind me about my booked consultation";
+  "Yes, I agree to receive automated appointment reminders and notifications from RothBlueprint at the phone number provided. Message frequency varies. Msg & data rates may apply. Reply STOP to cancel, HELP for help. View Terms and Privacy Policy.";
 
 const defaultSource = {
   label: "Default",
