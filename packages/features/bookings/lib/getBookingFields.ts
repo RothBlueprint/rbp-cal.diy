@@ -38,6 +38,7 @@ export const getBookingFieldsWithSystemFields = ({
   disableBookingTitle,
   customInputs,
   metadata,
+  slug,
 }: {
   bookingFields: Fields | EventType["bookingFields"];
   disableGuests: boolean;
@@ -45,6 +46,7 @@ export const getBookingFieldsWithSystemFields = ({
   disableBookingTitle?: boolean;
   customInputs: EventTypeCustomInput[] | z.infer<typeof customInputSchema>[];
   metadata: EventType["metadata"] | z.infer<typeof EventTypeMetaDataSchema>;
+  slug?: string;
 }) => {
   const parsedMetaData = EventTypeMetaDataSchema.parse(metadata || {});
   const parsedBookingFields = eventTypeBookingFields.parse(bookingFields || []);
@@ -56,8 +58,42 @@ export const getBookingFieldsWithSystemFields = ({
     disableBookingTitle,
     additionalNotesRequired: parsedMetaData?.additionalNotesRequired || false,
     customInputs: parsedCustomInputs,
+    slug,
   });
 };
+
+const INTRO_SMS_CONSENT_LABEL =
+  "Yes, I would like to receive automated text messages from RothBlueprint to remind me about my booked consultation";
+
+/**
+ * Intro event types ask for this even when the stored bookingFields predate
+ * the question. Production's pool row was saved without it, so the booker
+ * never drew the checkbox. The field is optional and unchecked.
+ */
+function ensureIntroSmsConsent(bookingFields: Fields, slug?: string): Fields {
+  if (slug !== "intro") return bookingFields;
+  if (bookingFields.some((field) => field.name === "smsConsent")) return bookingFields;
+  const phoneIndex = bookingFields.findIndex((field) => field.name === "attendeePhoneNumber");
+  const consent = {
+    name: "smsConsent",
+    type: "boolean" as const,
+    label: INTRO_SMS_CONSENT_LABEL,
+    required: false,
+    hidden: false,
+    editable: "user" as const,
+    sources: [
+      {
+        id: "user" as const,
+        type: "user" as const,
+        label: "User" as const,
+        fieldRequired: false,
+      },
+    ],
+  };
+  const next = [...bookingFields];
+  next.splice(phoneIndex === -1 ? next.length : phoneIndex + 1, 0, consent);
+  return next;
+}
 
 export const ensureBookingInputsHaveSystemFields = ({
   bookingFields,
@@ -66,6 +102,7 @@ export const ensureBookingInputsHaveSystemFields = ({
   disableBookingTitle,
   additionalNotesRequired,
   customInputs,
+  slug,
 }: {
   bookingFields: Fields;
   disableGuests: boolean;
@@ -73,6 +110,7 @@ export const ensureBookingInputsHaveSystemFields = ({
   disableBookingTitle?: boolean;
   additionalNotesRequired: boolean;
   customInputs: z.infer<typeof customInputSchema>[];
+  slug?: string;
 }) => {
   // If bookingFields is set already, the migration is done.
   const hideBookingTitle = disableBookingTitle ?? true;
@@ -304,7 +342,7 @@ export const ensureBookingInputsHaveSystemFields = ({
     }
   }
 
-  bookingFields = bookingFields.concat(missingSystemAfterFields).map((f) => {
+  bookingFields = ensureIntroSmsConsent(bookingFields.concat(missingSystemAfterFields), slug).map((f) => {
     return {
       ...f,
       // TODO: This has to be a FormBuilder feature and not be specific to bookingFields. Either use zod transform in FormBuilder to add labelAsSafeHtml automatically or add a getter for fields that would do this.

@@ -49,7 +49,7 @@ export const introSmsConsentField = {
 /**
  * Canonical intro form. Location sits after the consent checkbox so a hidden
  * single location does not land between the phone field and the checkbox.
- * Guests stay hidden — the public form is name, email, phone, consent, notes.
+ * Guests stay visible ("Invite your spouse or a guest").
  */
 export function introBookingFields() {
   return [
@@ -112,7 +112,7 @@ export function introBookingFields() {
       name: "guests",
       defaultPlaceholder: "email",
       required: false,
-      hidden: true,
+      hidden: false,
       sources: [defaultSource],
     },
   ];
