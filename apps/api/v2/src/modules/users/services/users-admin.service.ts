@@ -489,6 +489,115 @@ export class UsersAdminService {
     return await this.calendarsService.getCalendars(userId);
   }
 
+  // ── Conflict calendars ────────────────────────────────────────────────────
+  //
+  // rbp: which calendars inside a connected account count as busy time. The Google
+  // connect callback selects the PRIMARY calendar only, so an agent who keeps
+  // appointments on a second calendar in the same account gets booked straight over
+  // them. Upstream's /v2/selected-calendars resolves the user from the API key's
+  // OWNER (the same trap the disconnect route below exists for), so these are
+  // scoped to :userId.
+  //
+  // Both read and write on the PRIMARY inside a serializable transaction. The
+  // removal guard is a read-then-delete, and a replica read or two interleaved
+  // unchecks could each see the other calendar as still checked and together leave
+  // none. Postgres aborts one of the two instead.
+
+  /**
+   * The connection named by `credentialId` and its credential type, or a 4xx.
+   *
+   * The calendar id is checked against what the provider lists for THIS user's
+   * connection, not merely against who owns the credential. An id the account can't
+   * see would save happily and then match nothing at free/busy time: a checkbox
+   * that reads as protection and gives none.
+   */
+  private async requireConnectedCalendar(userId: number, credentialId: number, externalId: string) {
+    await this.requireUser(userId);
+    const { connectedCalendars } = await this.calendarsService.getCalendars(userId);
+    // Only this user's credentials are listed, so another user's id is simply not found.
+    const connection = connectedCalendars.find((c) => c.credentialId === credentialId);
+    if (!connection) {
+      throw new NotFoundException(`User with id ${userId} has no calendar connection ${credentialId}`);
+    }
+    if (connection.error || !connection.calendars?.length) {
+      throw new BadRequestException(`Calendar connection ${credentialId} isn't working; reconnect it first`);
+    }
+    if (!connection.calendars.some((c) => c.externalId === externalId)) {
+      throw new NotFoundException(`Calendar ${externalId} is not in connection ${credentialId}`);
+    }
+    return { connection, integration: connection.integration.type };
+  }
+
+  /** Check `externalId` for conflicts. Idempotent: already checked is success. */
+  async addUserSelectedCalendar(userId: number, credentialId: number, externalId: string) {
+    const { integration } = await this.requireConnectedCalendar(userId, credentialId, externalId);
+
+    await this.dbWrite.prisma.$transaction(
+      async (tx) => {
+        const existing = await tx.selectedCalendar.findFirst({
+          where: { userId, integration, externalId, eventTypeId: null },
+        });
+        if (existing) return;
+        // eventTypeId null = user level, i.e. every event type, which is what the connect
+        // callback writes for the primary. Not .upsert: the unique key includes the nullable
+        // eventTypeId, and Postgres never treats two NULLs as equal.
+        await tx.selectedCalendar.create({
+          data: { userId, integration, externalId, credentialId, eventTypeId: null },
+        });
+      },
+      { isolationLevel: "Serializable" }
+    );
+
+    await this.calendarsCacheService.deleteConnectedAndDestinationCalendarsCache(userId);
+  }
+
+  /**
+   * Stop checking `externalId` for conflicts. Idempotent: already unchecked is success.
+   *
+   * REFUSES (409) to leave the connection with no checked calendar it can see. That
+   * state fails OPEN: getCalendarsEvents skips a non-delegated credential with no
+   * selected calendars and reports no busy time, so the agent becomes bookable over
+   * everything. Removing the last one is a disconnect, and that is a different route.
+   */
+  async removeUserSelectedCalendar(userId: number, credentialId: number, externalId: string) {
+    const { connection, integration } = await this.requireConnectedCalendar(
+      userId,
+      credentialId,
+      externalId
+    );
+    const visible = new Set((connection.calendars ?? []).map((c) => c.externalId));
+
+    const removed = await this.dbWrite.prisma.$transaction(
+      async (tx) => {
+        // Matched on integration, not credentialId: that is how getCalendarsEvents pairs
+        // selected calendars with a credential, so it is what decides what gets checked.
+        const selected = await tx.selectedCalendar.findMany({
+          where: { userId, integration, eventTypeId: null },
+        });
+        if (!selected.some((sc) => sc.externalId === externalId)) return false;
+
+        const remaining = selected.filter((sc) => sc.externalId !== externalId && visible.has(sc.externalId));
+        if (!remaining.length) {
+          throw new ConflictException(
+            "That is the last calendar checked for conflicts on this connection. Check another one first, or disconnect the account."
+          );
+        }
+
+        // deleteMany, not delete: nothing stops duplicate user-level rows (NULL eventTypeId
+        // again), and leaving one behind would keep the calendar checked.
+        await tx.selectedCalendar.deleteMany({
+          where: { userId, integration, externalId, eventTypeId: null },
+        });
+        return true;
+      },
+      { isolationLevel: "Serializable" }
+    );
+
+    if (removed) {
+      await this.calendarsCacheService.deleteConnectedAndDestinationCalendarsCache(userId);
+    }
+  }
+
   async getCalendarOAuthUrl(userId: number, calendar: string, returnTo?: string) {
     await this.requireUser(userId);
     const state = signState(
