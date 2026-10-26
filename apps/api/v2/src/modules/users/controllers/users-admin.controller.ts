@@ -20,6 +20,7 @@ import {
 } from "@calcom/platform-types";
 import type { GetBookingsOutput_2024_08_13 } from "@calcom/platform-types";
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -40,6 +41,7 @@ import { API_KEY_HEADER } from "@/lib/docs/headers";
 import { GetUser } from "@/modules/auth/decorators/get-user/get-user.decorator";
 import { ApiAuthGuard } from "@/modules/auth/guards/api-auth/api-auth.guard";
 import { IsSystemAdminGuard } from "@/modules/auth/guards/system-admin/is-system-admin.guard";
+import { AdminSelectedCalendarInput } from "@/modules/users/inputs/admin-selected-calendar.input";
 import { ProvisionUserInput } from "@/modules/users/inputs/provision-user.input";
 import { LoginTokenOutput } from "@/modules/users/outputs/login-token.output";
 import { ProvisionUserOutput } from "@/modules/users/outputs/provision-user.output";
@@ -322,6 +324,42 @@ export class UsersAdminController {
     const data = await this.usersAdminService.getUserCalendars(userId);
 
     return { status: SUCCESS_STATUS, data };
+  }
+
+  @Post("/:userId/selected-calendars")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Check one of a user's calendars for conflicts (admin only)",
+    description:
+      "Adds a user-level selected calendar, so its events block booking slots. The Google connect callback selects only the primary calendar; this is how a second calendar in the same account gets checked. Unlike the user-scoped POST /v2/selected-calendars, which acts on the API key OWNER, this acts on {userId}. The calendar must be listed under that connection by GET /v2/users/{userId}/calendars. Idempotent.",
+  })
+  async addUserSelectedCalendar(
+    @Param("userId", ParseIntPipe) userId: number,
+    @Body() body: AdminSelectedCalendarInput
+  ): Promise<AdminStatusResponse> {
+    await this.usersAdminService.addUserSelectedCalendar(userId, body.credentialId, body.externalId);
+
+    return { status: SUCCESS_STATUS };
+  }
+
+  @Delete("/:userId/selected-calendars")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Stop checking one of a user's calendars for conflicts (admin only)",
+    description:
+      "Removes a user-level selected calendar. 409 if it is the last checked calendar on that connection: with none checked, Cal reports the user free at all times. Idempotent otherwise.",
+  })
+  async removeUserSelectedCalendar(
+    @Param("userId", ParseIntPipe) userId: number,
+    @Query("credentialId", ParseIntPipe) credentialId: number,
+    @Query("externalId") externalId?: string
+  ): Promise<AdminStatusResponse> {
+    if (!externalId) {
+      throw new BadRequestException("externalId is required");
+    }
+    await this.usersAdminService.removeUserSelectedCalendar(userId, credentialId, externalId);
+
+    return { status: SUCCESS_STATUS };
   }
 
   @Get("/:userId/calendars/:calendar/connect")
