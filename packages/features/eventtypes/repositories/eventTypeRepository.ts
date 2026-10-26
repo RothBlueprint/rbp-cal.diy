@@ -1129,11 +1129,34 @@ export class EventTypeRepository implements IEventTypesRepository {
       });
     }
 
-    // Fallback to findFirst if neither is provided (shouldn't happen in practice)
+    // rbp: no owner means no match. The old fallback here was
+    // findFirst({ slug }) across every event type, which for a team booker
+    // (no user has the team's slug) returned some agent's personal "intro"
+    // event. Slots then came from that agent while bookings checked the pool.
+    return null;
+  }
+
+  /**
+   * rbp: a team event type by team slug and event slug, for the slots lookup
+   * when the booker sends `usernameList: [teamSlug]` and `isTeamEvent`.
+   * Outside an org a team slug is not unique (parentId is null), so order by
+   * id to keep the answer stable.
+   */
+  async findTeamEventTypeIdBySlugs({
+    teamSlug,
+    slug,
+    orgSlug,
+  }: {
+    teamSlug: string;
+    slug: string;
+    orgSlug: string | null;
+  }) {
     return this.prismaClient.eventType.findFirst({
       where: {
         slug,
+        team: orgSlug ? { slug: teamSlug, parent: { slug: orgSlug } } : { slug: teamSlug, parentId: null },
       },
+      orderBy: { id: "asc" },
       select: {
         id: true,
       },

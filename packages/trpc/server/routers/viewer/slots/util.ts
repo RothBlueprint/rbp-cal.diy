@@ -355,6 +355,7 @@ export class AvailableSlotsService {
   private async getEventTypeId({
     slug,
     eventTypeSlug,
+    isTeamEvent,
     organizationDetails,
   }: {
     slug?: string;
@@ -364,11 +365,24 @@ export class AvailableSlotsService {
   }) {
     if (!eventTypeSlug || !slug) return null;
 
-    const userId = await this.getUserIdFromUsername(
-      slug,
-      organizationDetails ?? { currentOrgDomain: null, isValidOrgDomain: false }
-    );
+    const orgDetails = organizationDetails ?? { currentOrgDomain: null, isValidOrgDomain: false };
     const eventTypeRepo = this.dependencies.eventTypeRepo;
+    // rbp: a team booker sends the TEAM slug as usernameList[0]. Upstream
+    // cal.diy dropped teams and with them this branch, so the team slug was
+    // looked up as a username and the slots came from the wrong event type.
+    if (isTeamEvent) {
+      const eventType = await eventTypeRepo.findTeamEventTypeIdBySlugs({
+        teamSlug: slug,
+        slug: eventTypeSlug,
+        orgSlug: orgDetails.isValidOrgDomain ? orgDetails.currentOrgDomain : null,
+      });
+      if (!eventType) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+      return eventType.id;
+    }
+
+    const userId = await this.getUserIdFromUsername(slug, orgDetails);
     const eventType = await eventTypeRepo.findFirstEventTypeId({ slug: eventTypeSlug, userId });
     if (!eventType) {
       throw new TRPCError({ code: "NOT_FOUND" });
