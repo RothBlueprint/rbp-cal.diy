@@ -2,6 +2,7 @@ import { CAL_VIDEO, GOOGLE_MEET, OFFICE_365_VIDEO, SUCCESS_STATUS, ZOOM } from "
 import { HttpService } from "@nestjs/axios";
 import {
   BadRequestException,
+  Body,
   Controller,
   Delete,
   Get,
@@ -18,15 +19,17 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { ApiHeader, ApiOperation, ApiParam, ApiTags as DocsTags } from "@nestjs/swagger";
+import { ApiExcludeEndpoint, ApiHeader, ApiOperation, ApiParam, ApiTags as DocsTags } from "@nestjs/swagger";
 import { plainToInstance } from "class-transformer";
 import { Request } from "express";
 import { API_VERSIONS_VALUES } from "@/lib/api-versions";
 import { API_KEY_OR_ACCESS_TOKEN_HEADER } from "@/lib/docs/headers";
 import type { SignedStatePayload } from "@/lib/oauth-state/signed-state";
 import { looksSigned, verifyState } from "@/lib/oauth-state/signed-state";
+import { urlValidationResponse } from "@/lib/zoom-webhook/zoom-webhook";
 import { GetUser } from "@/modules/auth/decorators/get-user/get-user.decorator";
 import { ApiAuthGuard } from "@/modules/auth/guards/api-auth/api-auth.guard";
+import { ZoomWebhookGuard } from "@/modules/conferencing/guards/zoom-webhook.guard";
 import {
   ConferencingAppOutputResponseDto,
   ConferencingAppsOutputDto,
@@ -41,6 +44,11 @@ import { GetDefaultConferencingAppOutputResponseDto } from "@/modules/conferenci
 import { SetDefaultConferencingAppOutputResponseDto } from "@/modules/conferencing/outputs/set-default-conferencing-app.output";
 import { ConferencingService } from "@/modules/conferencing/services/conferencing.service";
 import { UserWithProfile } from "@/modules/users/users.repository";
+
+type ZoomWebhookEvent = {
+  event?: string;
+  payload?: { plainToken?: string; user_id?: string };
+};
 
 export type OAuthCallbackState = {
   accessToken: string;
@@ -212,6 +220,35 @@ export class ConferencingController {
         url: decodedCallbackState.onErrorReturnTo ?? "",
       };
     }
+  }
+
+  /**
+   * Zoom's event notification endpoint, for app_deauthorized: a user removed
+   * the app from their Zoom account. Zoom has already revoked our access; it
+   * requires us to delete what we stored, which is the credential.
+   *
+   * Registered on the Zoom app as the event notification endpoint URL, with
+   * only the "App Deauthorized" event subscribed. Also answers the
+   * endpoint.url_validation challenge Zoom sends when the URL is saved.
+   * Public by necessity; ZoomWebhookGuard is what proves the caller is Zoom.
+   */
+  @Post("/zoom/deauthorize")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ZoomWebhookGuard)
+  @ApiExcludeEndpoint()
+  async zoomDeauthorize(@Body() body: Buffer | ZoomWebhookEvent) {
+    const event: ZoomWebhookEvent = Buffer.isBuffer(body) ? JSON.parse(body.toString("utf-8")) : body;
+
+    if (event.event === "endpoint.url_validation" && event.payload?.plainToken) {
+      // biome-ignore lint/style/noProcessEnv: the guard has already required it
+      return urlValidationResponse(process.env.ZOOM_WEBHOOK_SECRET_TOKEN ?? "", event.payload.plainToken);
+    }
+
+    if (event.event === "app_deauthorized" && event.payload?.user_id) {
+      await this.conferencingService.deauthorizeZoomUser(event.payload.user_id);
+    }
+
+    return { status: SUCCESS_STATUS };
   }
 
   @Get("/")

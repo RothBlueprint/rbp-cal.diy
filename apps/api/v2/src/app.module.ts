@@ -99,6 +99,12 @@ export class AppModule implements NestModule {
         {
           path: "/v2/webhooks/vercel/deployment-promoted",
           method: RequestMethod.POST,
+        },
+        // Zoom signs the raw bytes (ZoomWebhookGuard), so parsing first would
+        // make every signature check fail.
+        {
+          path: "/v2/conferencing/zoom/deauthorize",
+          method: RequestMethod.POST,
         }
       )
       .apply(UrlencodedBodyMiddleware)
