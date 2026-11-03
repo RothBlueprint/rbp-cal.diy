@@ -35,6 +35,28 @@ function normalizeResponses(responses: CalEventResponses | null | undefined): Ca
   return out;
 }
 
+/**
+ * RothBlueprint's webhook reader only accepts a string at
+ * `responses.attendeePhoneNumber` (`isinstance(value, str)`). Other answers
+ * stay in the `{ label, value }` envelope. The same E.164 string is also
+ * stored on `attendees[0].phoneNumber` and, via the raw responses map, on
+ * REST `bookingFieldsResponses.attendeePhoneNumber`.
+ */
+function responsesForSubscriber(
+  responses: CalEventResponses | null | undefined
+): CalEventResponses | undefined {
+  const normalized = normalizeResponses(responses) ?? responses ?? undefined;
+  if (!normalized?.attendeePhoneNumber || typeof normalized.attendeePhoneNumber !== "object") {
+    return normalized;
+  }
+  const phone = normalized.attendeePhoneNumber.value;
+  if (typeof phone !== "string" || !phone.trim()) return normalized;
+  return {
+    ...normalized,
+    attendeePhoneNumber: phone as unknown as CalEventResponses[string],
+  };
+}
+
 /** Derive firstName/lastName from name for legacy payload parity (attendees[].firstName, attendees[].lastName). */
 function nameToFirstAndLast(name: string): { firstName: string; lastName: string } {
   const trimmed = (name ?? "").trim();
@@ -214,7 +236,7 @@ export class BookingPayloadBuilder extends BaseBookingPayloadBuilder {
       location: params.evt.location,
       uid: params.evt.uid,
       customInputs: params.evt.customInputs,
-      responses: normalizeResponses(params.evt.responses) ?? params.evt.responses,
+      responses: responsesForSubscriber(params.evt.responses),
       userFieldsResponses: params.evt.userFieldsResponses,
       status: params.status,
       eventTitle: params.eventType?.eventTitle,

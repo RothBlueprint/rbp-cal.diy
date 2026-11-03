@@ -9,7 +9,7 @@ export const metadata = {
   categories: ["conferencing"],
   variant: "conferencing",
   logo: "icon.svg",
-  publisher: "Cal.diy",
+  publisher: "RothBlueprint",
   url: "https://zoom.us/",
   category: "conferencing",
   slug: "zoom",

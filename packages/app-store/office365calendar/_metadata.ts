@@ -10,7 +10,7 @@ export const metadata = {
   category: "calendar",
   categories: ["calendar"],
   logo: "icon.svg",
-  publisher: "Cal.diy",
+  publisher: "RothBlueprint",
   slug: "office365-calendar",
   dirName: "office365calendar",
   url: "https://cal.com/",

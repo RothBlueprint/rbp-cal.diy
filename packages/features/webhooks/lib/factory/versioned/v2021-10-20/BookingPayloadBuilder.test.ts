@@ -161,6 +161,40 @@ describe("v2021-10-20/BookingPayloadBuilder", () => {
      * consumers. They exercise normalization and field shapes without mocks.
      */
 
+    it("sends attendeePhoneNumber as an E.164 string on BOOKING_CREATED", () => {
+      const dto = createMockDTO(WebhookTriggerEvents.BOOKING_CREATED, {
+        evt: {
+          ...mockCalendarEvent,
+          responses: {
+            name: { value: "Test Testson", label: "your_name" },
+            email: { value: "test@example.com", label: "email_address" },
+            attendeePhoneNumber: { value: "+16025551234", label: "phone_number", isHidden: false },
+          },
+          attendees: [
+            {
+              email: "test@example.com",
+              name: "Test Testson",
+              timeZone: "UTC",
+              language: { locale: "en" },
+              phoneNumber: "+16025551234",
+            },
+          ],
+        },
+      });
+      const result = builder.build(dto);
+      const p = result.payload as EventPayloadType & {
+        responses?: { attendeePhoneNumber?: unknown; email?: { value?: string } };
+        attendees?: { phoneNumber?: string; email?: string }[];
+        uid?: string;
+      };
+
+      expect(p.responses?.attendeePhoneNumber).toBe("+16025551234");
+      expect(p.responses?.email?.value).toBe("test@example.com");
+      expect(p.attendees?.[0]?.phoneNumber).toBe("+16025551234");
+      expect(p.attendees?.[0]?.email).toBe("test@example.com");
+      expect(p.uid).toBe("booking-uid-123");
+    });
+
     it("normalizes response labels to your_name and email_address for BOOKING_REQUESTED", () => {
       const dto = createMockDTO(WebhookTriggerEvents.BOOKING_REQUESTED, {
         evt: {
