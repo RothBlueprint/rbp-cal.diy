@@ -252,7 +252,7 @@ test.describe("Event Types tests", () => {
         await bookTimeSlot(page);
 
         await expect(page.locator("[data-testid=success-page]")).toBeVisible();
-        await expect(page.locator("[data-testid=where] ")).toContainText("Cal Video");
+        await expect(page.locator("[data-testid=where] ")).toContainText("RothBlueprint Video");
       });
 
       test("Can add Link Meeting as location and book with it", async ({ page }) => {

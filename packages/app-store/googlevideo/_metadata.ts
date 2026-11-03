@@ -14,7 +14,7 @@ export const metadata = {
   title: "Google Meet",
   variant: "conferencing",
   logo: "logo.webp",
-  publisher: "Cal.diy",
+  publisher: "RothBlueprint",
   url: "https://cal.com/",
   isGlobal: false,
   email: "help@cal.com",

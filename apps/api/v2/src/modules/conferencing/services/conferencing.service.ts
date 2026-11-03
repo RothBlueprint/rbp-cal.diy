@@ -117,11 +117,38 @@ export class ConferencingService {
 
   async disconnectConferencingApp(user: UserWithProfile, app: string) {
     const credential = await this.checkAppIsValidAndConnected(user, app);
+    if (app === ZOOM) {
+      // Before the delete: revoking needs the token the delete removes.
+      await this.zoomVideoService.revokeUserCredential(credential.id, user.id);
+    }
     return handleDeleteCredential({
       userId: user.id,
       userMetadata: user?.metadata,
       credentialId: credential.id,
     });
+  }
+
+  /**
+   * A user removed the app from their Zoom account (Zoom's app_deauthorized).
+   * Zoom has already revoked the grant; delete the credential it leaves here,
+   * the same way a disconnect does — which also moves their event types and
+   * default meeting location off Zoom, so leads keep getting a meeting link.
+   *
+   * No match is not an error: Zoom also sends this for a user who connected
+   * and later disconnected from our side.
+   */
+  async deauthorizeZoomUser(zoomUserId: string) {
+    const credentials = await this.zoomVideoService.findUserCredentialsForZoomUser(zoomUserId);
+    for (const credential of credentials) {
+      if (!credential.userId) continue;
+      const user = await this.usersRepository.findById(credential.userId);
+      await handleDeleteCredential({
+        userId: credential.userId,
+        userMetadata: user?.metadata,
+        credentialId: credential.id,
+      });
+    }
+    this.logger.log(`Zoom deauthorization removed ${credentials.length} credential(s)`);
   }
 
   async setDefaultConferencingApp(user: UserWithProfile, app: string) {

@@ -123,6 +123,31 @@ Either document both or have the API config fall back to `WEB_APP_URL`.
 
 ---
 
+## 8. Slots for a team booker come from another event type · cal.diy · unfiled
+
+Fixed in our fork. The booker asks for slots by name (`usernameList: [teamSlug]`,
+`isTeamEvent: true`, no `eventTypeId`). The refactor removed the team branch from
+`AvailableSlotsService.getEventTypeId` (`packages/trpc/server/routers/viewer/slots/util.ts`)
+but kept the `isTeamEvent` parameter, so the team slug is looked up as a username.
+No user has that name, `userId` is undefined, and
+`EventTypeRepository.findFirstEventTypeId` falls through to an unscoped
+`findFirst({ slug })`. That returns whichever event type in the database has the
+slug, with no ordering.
+
+The page then shows one event type's slots and books another, which fails with
+`no_available_users_found_error`. We hit it because every agent's personal event
+type shares the pool's slug.
+
+The unscoped fallback is a bug even without teams: a username nobody has, plus a
+common slug, serves a stranger's availability.
+
+**Repro:** two users, each with an event type slugged `intro`; a team whose
+`intro` has different hosts. Call `slots.getSchedule` with
+`usernameList: [teamSlug]`, then with that team event's `eventTypeId`. The slots
+differ.
+
+---
+
 ## Not theirs — ours
 
 Recorded so nobody wastes time filing them.

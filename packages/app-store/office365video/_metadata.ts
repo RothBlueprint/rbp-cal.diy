@@ -17,7 +17,7 @@ export const metadata = {
   category: "conferencing",
   categories: ["conferencing"],
   logo: "icon.svg",
-  publisher: "Cal.diy",
+  publisher: "RothBlueprint",
   slug: "msteams",
   dirName: "office365video",
   url: "https://www.microsoft.com/en-ca/microsoft-teams/group-chat-software",

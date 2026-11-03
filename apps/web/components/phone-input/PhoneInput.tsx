@@ -22,9 +22,33 @@ export type PhoneInputProps = {
   disabled?: boolean;
   onChange: (value: string) => void;
   defaultCountry?: string;
+  /** Country the booker cannot change. Geo detection is ignored. */
+  lockedCountry?: string;
+  /** Limits the flag menu to these countries. Geo detection is ignored and the field starts on the US flag. */
+  allowedCountries?: string[];
   inputStyle?: CSSProperties;
   flagButtonStyle?: CSSProperties;
 };
+
+function countryConstraintProps(lockedCountry?: string, allowedCountries?: string[]) {
+  if (lockedCountry) {
+    return {
+      onlyCountries: [lockedCountry],
+      disableDropdown: true as const,
+      countryCodeEditable: false as const,
+      enableSearch: false as const,
+    };
+  }
+  if (allowedCountries?.length) {
+    return {
+      onlyCountries: allowedCountries,
+      disableDropdown: false as const,
+      countryCodeEditable: false as const,
+      enableSearch: false as const,
+    };
+  }
+  return { enableSearch: true as const, disableSearchIcon: true as const };
+}
 
 function BasePhoneInput({
   name,
@@ -32,11 +56,14 @@ function BasePhoneInput({
   onChange,
   value,
   defaultCountry = "us",
+  lockedCountry,
+  allowedCountries,
   ...rest
 }: PhoneInputProps) {
   const isPlatform = useIsPlatform();
   const defaultPhoneCountryFromStore = useBookerStore((state) => state.defaultPhoneCountry);
-  const effectiveDefaultCountry = defaultPhoneCountryFromStore || defaultCountry;
+  const effectiveDefaultCountry =
+    lockedCountry || (allowedCountries?.length ? defaultCountry : defaultPhoneCountryFromStore || defaultCountry);
 
   // This is to trigger validation on prefill value changes
   useEffect(() => {
@@ -57,7 +84,15 @@ function BasePhoneInput({
 
   if (!isPlatform) {
     return (
-      <BasePhoneInputWeb name={name} className={className} onChange={onChange} value={value} {...rest} />
+      <BasePhoneInputWeb
+        name={name}
+        className={className}
+        onChange={onChange}
+        value={value}
+        lockedCountry={lockedCountry}
+        allowedCountries={allowedCountries}
+        {...rest}
+      />
     );
   }
 
@@ -65,8 +100,7 @@ function BasePhoneInput({
     <PhoneInput
       {...rest}
       value={value ? value.trim().replace(/^\+?/, "+") : undefined}
-      enableSearch
-      disableSearchIcon
+      {...countryConstraintProps(lockedCountry, allowedCountries)}
       country={effectiveDefaultCountry}
       masks={CUSTOM_PHONE_MASKS}
       inputProps={{
@@ -109,20 +143,23 @@ function BasePhoneInputWeb({
   value,
   inputStyle,
   flagButtonStyle,
+  lockedCountry,
+  allowedCountries,
   ...rest
 }: Omit<PhoneInputProps, "defaultCountry">) {
-  const defaultCountry = useDefaultCountry();
+  const detectedCountry = useDefaultCountry();
+  const country = lockedCountry || (allowedCountries?.length ? "us" : detectedCountry);
 
   return (
     <PhoneInput
       {...rest}
       value={value ? value.trim().replace(/^\+?/, "+") : undefined}
-      // react-phone-input-2 treats `country` as a fallback. Keeping it stable 
-      // preserves calling-code-only values like `+371` during async updates, 
+      // react-phone-input-2 treats `country` as a fallback. Keeping it stable
+      // preserves calling-code-only values like `+371` during async updates,
       // while full international numbers still resolve their country from `value`.
-      country={defaultCountry}
-      enableSearch
-      disableSearchIcon
+      // A locked country skips that and stays on the given flag.
+      {...countryConstraintProps(lockedCountry, allowedCountries)}
+      country={country}
       masks={CUSTOM_PHONE_MASKS}
       inputProps={{
         name,
