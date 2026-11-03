@@ -89,6 +89,12 @@ behind the shared ALB, a dedicated Neon database, and an ElastiCache Serverless 
 `.github/workflows/build-images.yml` builds+pushes GHCR images and (once repo variables
 are set) deploys via `.github/scripts/cal-deploy.sh`.
 
+Two environments: `development` deploys to `calendar-beta.rothblueprint.com` (`cal-*-dev`),
+and `main` deploys to `calendar.rothblueprint.com` after a reviewer approves. Branch off
+`development` and open PRs into it; PRs into `main` must come from `development`. Bookings
+on dev send real email, so use made-up attendees. Details and open separation gaps:
+`docs/infrastructure/calendar-dev.md` in the rbp repo.
+
 ## Commits
 
 Conventional commits (`feat:`, `fix:`, `ci:`, `docs:`). **No `Co-Authored-By: Claude`
