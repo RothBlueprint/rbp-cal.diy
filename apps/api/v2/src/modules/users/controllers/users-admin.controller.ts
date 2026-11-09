@@ -46,6 +46,7 @@ import { ProvisionUserInput } from "@/modules/users/inputs/provision-user.input"
 import { LoginTokenOutput } from "@/modules/users/outputs/login-token.output";
 import { ProvisionUserOutput } from "@/modules/users/outputs/provision-user.output";
 import { UsersAdminService } from "@/modules/users/services/users-admin.service";
+import { UsersAdminAvailabilityService } from "@/modules/users/services/users-admin-availability.service";
 import { UpsertUserWebhookInputDto } from "@/modules/webhooks/inputs/admin-user-webhook.input";
 import {
   EventTypeWebhookOutputDto,
@@ -64,7 +65,10 @@ type AdminDataResponse = AdminStatusResponse & { data: unknown };
 @DocsTags("Users / Admin")
 @ApiHeader(API_KEY_HEADER)
 export class UsersAdminController {
-  constructor(private readonly usersAdminService: UsersAdminService) {}
+  constructor(
+    private readonly usersAdminService: UsersAdminService,
+    private readonly usersAdminAvailabilityService: UsersAdminAvailabilityService
+  ) {}
 
   @Post("/")
   @ApiOperation({ summary: "Provision a user (admin only)" })
@@ -127,6 +131,23 @@ export class UsersAdminController {
       status: SUCCESS_STATUS,
       data,
     };
+  }
+
+  @Get("/:userId/availability-check")
+  @ApiOperation({
+    summary: "Explain when a user can be booked on an event type (admin only)",
+    description:
+      "rbp: runs Cal's own availability logic on the user for the event type's length and buffers, whether or not they are a host of it right now. Returns their working hours, the free time left after busy time, and every busy block tagged booking | calendar | calendar_error | limit, so a settings page can say why each time is or is not bookable. start/end are ISO datetimes, at most 31 days apart.",
+  })
+  async getUserAvailabilityCheck(
+    @Param("userId", ParseIntPipe) userId: number,
+    @Query("eventTypeId", ParseIntPipe) eventTypeId: number,
+    @Query("start") start: string,
+    @Query("end") end: string
+  ): Promise<AdminDataResponse> {
+    const data = await this.usersAdminAvailabilityService.getAvailabilityCheck(userId, eventTypeId, start, end);
+
+    return { status: SUCCESS_STATUS, data };
   }
 
   @Get("/:userId/bookings")
