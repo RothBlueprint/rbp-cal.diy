@@ -73,6 +73,40 @@ const isGaxiosResponse = (error: unknown): error is GaxiosResponse<calendar_v3.S
   // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn not available in all build targets
   typeof error === "object" && !!error && Object.prototype.hasOwnProperty.call(error, "config");
 
+// rbp: Google signals Calendar quota exhaustion as 403 usageLimits/rateLimitExceeded
+// (seen in prod) or 429, and asks clients to back off exponentially. gaxios's own
+// retry covers neither: it retries 429/5xx only, and never PATCH or POST.
+const GOOGLE_RATE_LIMIT_REASONS: Set<string> = new Set(["rateLimitExceeded", "userRateLimitExceeded"]);
+
+const isGoogleRateLimitError = (error: unknown): boolean => {
+  const response = (
+    error as {
+      response?: { status?: number; data?: { error?: { errors?: { reason?: string }[] } } };
+    } | null
+  )?.response;
+  if (response?.status === 429) return true;
+  if (response?.status !== 403) return false;
+  return (response.data?.error?.errors ?? []).some((e) => GOOGLE_RATE_LIMIT_REASONS.has(e?.reason ?? ""));
+};
+
+// Attempts after the first, and the base of the backoff: waits of ~0.5s, ~1s, ~2s
+// (each plus up to 0.5s jitter). Bounded because this runs inside the booking
+// request: worst case adds ~5s before the booker sees a confirmation.
+const RATE_LIMIT_RETRIES = 3;
+const RATE_LIMIT_BASE_DELAY_MS = 500;
+
+async function withRateLimitRetry<T>(request: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await request();
+    } catch (error) {
+      if (attempt >= RATE_LIMIT_RETRIES || !isGoogleRateLimitError(error)) throw error;
+      const delayMs = RATE_LIMIT_BASE_DELAY_MS * 2 ** attempt + Math.random() * RATE_LIMIT_BASE_DELAY_MS;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 class GoogleCalendarService implements Calendar {
   private integrationName = "";
   private auth: CalendarAuth;
@@ -296,26 +330,48 @@ class GoogleCalendarService implements Calendar {
       }
 
       if (event && event.id && event.hangoutLink) {
-        await calendar.events.patch({
-          // Update the same event but this time we know the hangout link
-          calendarId: selectedCalendar,
-          eventId: event.id || "",
-          requestBody: {
-            description: getRichDescription({
-              ...calEvent,
-              additionalInformation: { hangoutLink: event.hangoutLink },
-            }),
-            location: getLocation({
-              videoCallData: calEvent.videoCallData,
-              additionalInformation: {
-                ...calEvent.additionalInformation,
-                hangoutLink: event.hangoutLink,
+        // rbp: this patch is cosmetic (it writes the Meet link into the event's
+        // description/location text). The event and its Meet room already exist,
+        // so a failure here must not fail createEvent — that discards the created
+        // event, leaves the booking with no videoCallUrl and the location stuck at
+        // `integrations:google:meet`, and every email ships without a join link.
+        // Seen in prod as Google 403 rateLimitExceeded, so rate limits are retried
+        // with backoff first (the PATCH sets the same fields each time, so a retry
+        // is safe); anything still failing after that is logged and skipped.
+        const hangoutLink = event.hangoutLink;
+        const eventId = event.id;
+        try {
+          await withRateLimitRetry(() =>
+            calendar.events.patch({
+              // Update the same event but this time we know the hangout link
+              calendarId: selectedCalendar,
+              eventId,
+              requestBody: {
+                description: getRichDescription({
+                  ...calEvent,
+                  additionalInformation: { hangoutLink },
+                }),
+                location: getLocation({
+                  videoCallData: calEvent.videoCallData,
+                  additionalInformation: {
+                    ...calEvent.additionalInformation,
+                    hangoutLink,
+                  },
+                  location: calEvent.location,
+                  uid: calEvent.uid,
+                }),
               },
-              location: calEvent.location,
-              uid: calEvent.uid,
-            }),
-          },
-        });
+            })
+          );
+        } catch (patchError) {
+          if (isGaxiosResponse(patchError)) {
+            delete patchError.config.body;
+          }
+          this.log.warn(
+            "Created google calendar event but could not write the Meet link into its description; keeping the event",
+            safeStringify({ error: patchError, eventId: event.id, selectedCalendar, credentialId })
+          );
+        }
       }
 
       return {

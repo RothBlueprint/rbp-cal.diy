@@ -868,6 +868,137 @@ describe("createEvent", () => {
 
     log.info("createEvent with hangoutLink patch test passed");
   });
+
+  describe("when the follow-up hangoutLink patch fails", () => {
+    const mockHangoutLink = "https://meet.google.com/gzi-sfqt-eze";
+    const mockGoogleEvent = {
+      id: "mock-event-patch-fails",
+      summary: "Test Meeting",
+      start: { dateTime: "2024-06-15T10:00:00Z", timeZone: "UTC" },
+      end: { dateTime: "2024-06-15T11:00:00Z", timeZone: "UTC" },
+      hangoutLink: mockHangoutLink,
+    };
+    // The shape Google returned in prod (gaxios error with a 403 usageLimits body).
+    const rateLimitError = Object.assign(new Error("Rate Limit Exceeded"), {
+      config: { body: "{}" },
+      response: {
+        status: 403,
+        data: {
+          error: {
+            code: 403,
+            message: "Rate Limit Exceeded",
+            errors: [{ domain: "usageLimits", reason: "rateLimitExceeded", message: "Rate Limit Exceeded" }],
+          },
+        },
+      },
+    });
+
+    const testCalEvent = {
+      type: "test-event-type",
+      uid: "cal-event-uid-patch-fails",
+      title: "Test Meeting",
+      startTime: "2024-06-15T10:00:00Z",
+      endTime: "2024-06-15T11:00:00Z",
+      organizer: {
+        id: 1,
+        name: "Test Organizer",
+        email: "organizer@example.com",
+        timeZone: "UTC",
+        language: { translate: (...args: any[]) => args[0], locale: "en" },
+      },
+      attendees: [],
+      location: "integrations:google:meet",
+      calendarDescription: "Test meeting description",
+      destinationCalendar: [
+        {
+          id: 1,
+          integration: "google_calendar",
+          externalId: "primary",
+          primaryEmail: null,
+          userId: mockCredential.userId,
+          eventTypeId: null,
+          credentialId: mockCredential.id,
+          delegationCredentialId: null,
+          createdAt: new Date("2024-06-15T11:00:00Z"),
+          updatedAt: new Date("2024-06-15T11:00:00Z"),
+          customCalendarReminder: null,
+        },
+      ],
+    };
+
+    const createWithPatch = async (eventsPatchMock: ReturnType<typeof vi.fn>) => {
+      const calendarService = BuildCalendarService(mockCredential);
+      setFullMockOAuthManagerRequest();
+      calendarMock.calendar_v3.Calendar().events.insert = vi
+        .fn()
+        .mockResolvedValue({ data: mockGoogleEvent });
+      calendarMock.calendar_v3.Calendar().events.patch = eventsPatchMock;
+      // Skip the real backoff waits but record them, so the test is instant and
+      // can still assert the schedule.
+      const delays: number[] = [];
+      const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+        callback: () => void,
+        ms?: number
+      ) => {
+        delays.push(ms ?? 0);
+        callback();
+        return 0;
+      }) as unknown as typeof setTimeout);
+      try {
+        const result = await calendarService.createEvent(testCalEvent, mockCredential.id);
+        return { result, delays };
+      } finally {
+        setTimeoutSpy.mockRestore();
+      }
+    };
+
+    const expectEventKept = (result: Awaited<ReturnType<typeof createWithPatch>>["result"]) => {
+      expect(result.id).toBe("mock-event-patch-fails");
+      expect(result.hangoutLink).toBe(mockHangoutLink);
+      expect(result.additionalInfo.hangoutLink).toBe(mockHangoutLink);
+    };
+
+    test("retries a rate-limited patch with backoff until it succeeds", async () => {
+      const eventsPatchMock = vi
+        .fn()
+        .mockRejectedValueOnce(rateLimitError)
+        .mockRejectedValueOnce(rateLimitError)
+        .mockResolvedValue({ data: { ...mockGoogleEvent, location: mockHangoutLink } });
+
+      const { result, delays } = await createWithPatch(eventsPatchMock);
+
+      expect(eventsPatchMock).toHaveBeenCalledTimes(3);
+      expectEventKept(result);
+      // Exponential: ~500ms then ~1000ms, each with up to 500ms jitter.
+      expect(delays).toHaveLength(2);
+      expect(delays[0]).toBeGreaterThanOrEqual(500);
+      expect(delays[0]).toBeLessThan(1000);
+      expect(delays[1]).toBeGreaterThanOrEqual(1000);
+      expect(delays[1]).toBeLessThan(1500);
+    });
+
+    test("keeps the event when the patch stays rate-limited after every retry", async () => {
+      const eventsPatchMock = vi.fn().mockRejectedValue(rateLimitError);
+
+      const { result, delays } = await createWithPatch(eventsPatchMock);
+
+      expect(eventsPatchMock).toHaveBeenCalledTimes(4); // 1 attempt + 3 retries
+      expectEventKept(result);
+      expect(delays).toHaveLength(3);
+      expect(delays[2]).toBeGreaterThanOrEqual(2000);
+      expect(delays[2]).toBeLessThan(2500);
+    });
+
+    test("does not retry a non-rate-limit failure, and still keeps the event", async () => {
+      const eventsPatchMock = vi.fn().mockRejectedValue(new Error("Backend Error"));
+
+      const { result, delays } = await createWithPatch(eventsPatchMock);
+
+      expect(eventsPatchMock).toHaveBeenCalledTimes(1);
+      expectEventKept(result);
+      expect(delays).toHaveLength(0);
+    });
+  });
 });
 
 describe("updateEvent", () => {
